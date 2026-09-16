@@ -69,11 +69,15 @@ jobs:
       - name: Cache Rust
         uses: Swatinem/rust-cache@v2
 
-      # netns::fork_and_enter needs unprivileged user namespaces enabled.
-      # GitHub-hosted Ubuntu runners have supported this historically, but
-      # Ubuntu's AppArmor userns restriction has shifted defaults before —
-      # this step fails loudly instead of the actual test failing
-      # confusingly if that ever changes upstream.
+      # ubuntu-latest is Ubuntu 24.04, which ships
+      # kernel.apparmor_restrict_unprivileged_userns=1 by default — this
+      # blocks CLONE_NEWUSER outright ("Operation not permitted" on the
+      # uid_map write) unless relaxed. Confirmed by hitting this for real
+      # on 2026-09-16. Same mitigation Chrome/Firefox CI use; harmless
+      # no-op on runners/distros that don't have this sysctl at all.
+      - name: Allow unprivileged user namespaces (Ubuntu 24.04+ AppArmor)
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+
       - name: Verify unprivileged user namespaces are available
         run: |
           unshare --user --net --map-root-user true || {
@@ -199,6 +203,11 @@ jobs:
 
       - name: Cache Rust
         uses: Swatinem/rust-cache@v2
+
+      # See the same step in the `test` job — Ubuntu 24.04 blocks
+      # CLONE_NEWUSER via AppArmor by default.
+      - name: Allow unprivileged user namespaces (Ubuntu 24.04+ AppArmor)
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
 
       - name: Resolve dependencies for MSRV
         run: rm -f Cargo.lock

@@ -17,6 +17,14 @@ Because a simulation is a model of the kernel's behavior, and models can be wron
 
 Linux only. Namespace isolation is a Linux kernel feature with no portable equivalent — the crate fails to compile on anything else, loudly, rather than silently doing nothing.
 
+**Ubuntu 24.04 and newer** (this includes GitHub's `ubuntu-latest` runners — confirmed by CI failing on this exact issue) ship `kernel.apparmor_restrict_unprivileged_userns=1` by default, which blocks `CLONE_NEWUSER` outright. If `enter_unprivileged_net_namespace` fails with something like `write failed /proc/self/uid_map: Operation not permitted`, that's this. Fix:
+
+```sh
+sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+```
+
+(or load an AppArmor profile permitting it for your binary specifically, if a blanket sysctl isn't acceptable in your environment).
+
 ## Installation
 
 Not published yet (and `gateflow` is already taken on crates.io by an unrelated, dormant SGX-related crate — the published name will need to differ; see [Roadmap](#roadmap)). For now, depend on it by path or git:
