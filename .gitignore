@@ -1,1 +1,7 @@
 /target
+
+# Dev-notes mdBook (see build.rs): //-NOTE/DOCS/RECS/FIX/SEC comments
+# extracted into a local browsable site. Kept out of the public repo
+# entirely, unlike cyberdeck's equivalent (that repo is private) —
+# these are maintainer-only notes, not meant to be discoverable.
+/docs/

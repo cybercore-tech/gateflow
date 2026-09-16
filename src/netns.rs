@@ -20,6 +20,24 @@
 //! regardless of how many threads the parent had, so entering the
 //! namespace immediately after fork is safe.
 
+//-RECS: veth pairs need a second namespace, not host CAP_NET_ADMIN
+// Real inter-sandbox connectivity (two `fork_and_enter`ed processes
+// actually talking to each other, not just each in isolation) can't be
+// done by wiring a veth pair into the host's root netns — an
+// unprivileged caller genuinely doesn't have CAP_NET_ADMIN there, and
+// getting it would mean asking users for host root, which is exactly
+// the promise this crate exists to avoid breaking.
+//
+// The version that stays unprivileged: create a *second* net namespace
+// that's also owned by the same user namespace `unshare(CLONE_NEWUSER)`
+// already created (repeat CLONE_NEWNET from a process already inside
+// that userns), then move a veth pair's second end into it. Both ends
+// stay under capabilities the caller already legitimately has. This is
+// closer to a small virtual-LAN primitive than a one-function addition —
+// scope it as its own deliberate piece of work, not a quick follow-up
+// to the loopback chaos primitive.
+//-END
+
 use std::fs;
 
 use nix::sched::{CloneFlags, unshare};
@@ -60,8 +78,14 @@ pub fn enter_unprivileged_net_namespace() -> Result<(), Error> {
 
     unshare(CloneFlags::CLONE_NEWUSER | CloneFlags::CLONE_NEWNET).map_err(Error::Namespace)?;
 
-    // Order matters: `setgroups` must be denied before `gid_map` can be
-    // written by an unprivileged process, or the write fails with EPERM.
+    //-SEC: uid/gid mapping order is load-bearing, not stylistic
+    // `setgroups` must be denied *before* `gid_map` is written, or the
+    // write fails with EPERM for an unprivileged process — the kernel
+    // refuses to let a process claim arbitrary supplementary groups via
+    // gid_map without first proving it can't `setgroups()` into them.
+    // Reordering these three writes silently breaks
+    // `enter_unprivileged_net_namespace` on every kernel, not just some.
+    //-END
     write_proc_self("/proc/self/setgroups", "deny")?;
     write_proc_self("/proc/self/uid_map", &format!("0 {uid} 1"))?;
     write_proc_self("/proc/self/gid_map", &format!("0 {gid} 1"))?;

@@ -9,6 +9,7 @@ This document defines the quality gate every change to this workspace must pass.
 - [Philosophy](#-philosophy)
 - [Running the Gate](#-running-the-gate)
 - [Step-by-Step](#-step-by-step)
+- [Dev Notes (`//-TAG` comments)](#-dev-notes---tag-comments)
 - [Adding a New Companion Crate](#-adding-a-new-companion-crate)
 - [Release Readiness](#-release-readiness)
 - [Official Docs](#-official-docs)
@@ -139,6 +140,34 @@ CI (`.github/workflows/ci.yml`) runs the equivalent checks on every push, includ
 
 **Docs:** [MSRV in the Cargo reference](https://doc.rust-lang.org/cargo/reference/manifest.html#the-rust-version-field)
 </details>
+
+---
+
+## 📝 Dev Notes (`//-TAG` comments)
+
+Same block-marker convention as the `cyberdeck` project, adapted. A tagged comment:
+
+```rust
+//-NOTE: Short title
+// Prose content, plain `//` comments, can span multiple lines.
+//-END
+```
+
+Tags, and what each means:
+
+| Tag | Use it for |
+|---|---|
+| `NOTE` | General context/rationale worth surfacing beyond an inline comment |
+| `DOCS` | A reminder that this needs real `///` rustdoc written eventually |
+| `RECS` | A recommendation for later — not urgent, "consider doing X" |
+| `FIX` | A known defect or gap |
+| `SEC` | Security/isolation-boundary reasoning — this crate's whole point is a privilege boundary, so these get their own bucket |
+
+`build.rs` extracts every tagged block into a local mdBook site at `docs/` on every `cargo build`/`check`/`test` — **maintainer-only, never committed** (`docs/` is gitignored) and **never part of rustdoc** (plain `//` comments never appear there regardless, but the aggregated view is a much more discoverable artifact than scattered source comments, so it stays fully local on top of that). Browse it with `mdbook serve docs` (loopback only) or `mdbook build docs` + open `docs/book/index.html`.
+
+The extraction only runs inside gateflow's own git checkout (checked via a `.git` directory next to `Cargo.toml`, which `cargo package` always excludes) — a `cargo add gateflow` downstream consumer's build never triggers it.
+
+**Don't nest tagged blocks inside each other.** There's no `CODE`-style tag here specifically because cyberdeck's version has a real bug with that: each tag's regex independently scans for the *next* `//-END` it finds, so a tag opened inside another tag's block steals the outer block's closing marker and silently truncates it. Gateflow's tags only wrap prose, never functional code spans, which avoids the precondition — keep it that way rather than reintroducing a `CODE` tag later without also fixing the underlying extraction to be nesting-aware.
 
 ---
 

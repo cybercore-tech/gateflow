@@ -35,3 +35,7 @@ tokio = { version = "1.53.1", features = ["rt-multi-thread"] }
 version = "0.1.0"
 path = "crates/gateflow-macros"
 optional = true
+
+[build-dependencies]
+regex = "1.13.1"
+walkdir = "2.5.0"
