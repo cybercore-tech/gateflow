@@ -1,0 +1,29 @@
+[package]
+name = "enclave"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+description = "Real per-test kernel sandboxing for Rust: isolated network namespaces, not simulated ones."
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/darkstardevx/enclave"
+homepage = "https://github.com/darkstardevx/enclave"
+documentation = "https://docs.rs/enclave"
+readme = "README.md"
+keywords = ["sandbox", "testing", "namespaces", "linux", "networking"]
+categories = ["development-tools::testing", "os::linux-apis"]
+
+[workspace]
+members = ["crates/enclave-macros"]
+resolver = "3"
+
+[features]
+default = []
+macros = ["dep:enclave-macros"]
+
+[dependencies]
+nix = { version = "0.31.3", features = ["sched", "user", "process", "fs", "mount"] }
+
+[dependencies.enclave-macros]
+version = "0.1.0"
+path = "crates/enclave-macros"
+optional = true

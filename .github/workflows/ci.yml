@@ -1,0 +1,236 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - "**"
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: "1"
+
+jobs:
+  quality:
+    name: Format and Clippy
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Check diff whitespace
+        run: git diff --check
+
+      - name: Clippy
+        run: >
+          cargo clippy
+          --workspace
+          --all-targets
+          --
+          -D warnings
+
+      - name: Clippy all features
+        run: >
+          cargo clippy
+          --workspace
+          --all-targets
+          --all-features
+          --
+          -D warnings
+
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+
+      # netns::fork_and_enter needs unprivileged user namespaces enabled.
+      # GitHub-hosted Ubuntu runners have supported this historically, but
+      # Ubuntu's AppArmor userns restriction has shifted defaults before —
+      # this step fails loudly instead of the actual test failing
+      # confusingly if that ever changes upstream.
+      - name: Verify unprivileged user namespaces are available
+        run: |
+          unshare --user --net --map-root-user true || {
+            echo "::error::unprivileged user+net namespaces are not available on this runner";
+            exit 1;
+          }
+
+      - name: Check default features
+        run: >
+          cargo check
+          --workspace
+          --all-targets
+
+      - name: Test default features
+        run: >
+          cargo test
+          --workspace
+          --all-targets
+
+      - name: Test default rustdoc
+        env:
+          RUSTDOCFLAGS: "-D warnings"
+        run: >
+          cargo test
+          --workspace
+          --doc
+
+      - name: Check all features
+        run: >
+          cargo check
+          --workspace
+          --all-targets
+          --all-features
+
+      - name: Test all features
+        run: >
+          cargo test
+          --workspace
+          --all-targets
+          --all-features
+
+      - name: Test all-feature rustdoc
+        env:
+          RUSTDOCFLAGS: "-D warnings"
+        run: >
+          cargo test
+          --workspace
+          --doc
+          --all-features
+
+      - name: Build strict rustdoc (workspace)
+        env:
+          RUSTDOCFLAGS: "-D warnings"
+        run: >
+          cargo doc
+          --workspace
+          --no-deps
+          --all-features
+
+      - name: Build strict rustdoc (crate-local)
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          for package in enclave enclave-macros; do
+            echo "===== strict rustdoc: $package ====="
+
+            RUSTDOCFLAGS="-D warnings" cargo doc \
+              -p "$package" \
+              --no-deps \
+              --all-features
+          done
+
+      - name: Check macros feature in isolation
+        run: >
+          cargo check
+          -p enclave
+          --no-default-features
+          --features macros
+          --all-targets
+
+  package:
+    name: Package readiness
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+
+      - name: Inspect all package contents
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          for package in enclave enclave-macros; do
+            echo
+            echo "===== package contents: $package ====="
+
+            cargo package --list -p "$package"
+          done
+
+  msrv:
+    name: MSRV 1.85
+    runs-on: ubuntu-latest
+
+    env:
+      CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS: fallback
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust 1.85
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.85.0"
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+
+      - name: Resolve dependencies for MSRV
+        run: rm -f Cargo.lock
+
+      - name: Check all targets and features on MSRV
+        run: >
+          cargo check
+          --workspace
+          --all-targets
+          --all-features
+
+      - name: Test all targets and features on MSRV
+        run: >
+          cargo test
+          --workspace
+          --all-targets
+          --all-features
+
+      - name: Test rustdoc examples on MSRV
+        env:
+          RUSTDOCFLAGS: "-D warnings"
+        run: >
+          cargo test
+          --workspace
+          --doc
+          --all-features
+
+      - name: Build rustdoc on MSRV
+        env:
+          RUSTDOCFLAGS: "-D warnings"
+        run: >
+          cargo doc
+          --workspace
+          --no-deps
+          --all-features

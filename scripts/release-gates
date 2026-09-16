@@ -1,0 +1,325 @@
+#!/usr/bin/env bash
+
+mode="${1:-full}"
+msrv="1.85.0"
+
+packages=(
+    enclave
+    enclave-macros
+)
+
+root_features=(
+    macros
+)
+
+print_rule() {
+    printf '%*s\n' 72 '' | tr ' ' '='
+}
+
+run_gate() {
+    local name="$1"
+    shift
+
+    echo
+    print_rule
+    echo " GATE: $name"
+    print_rule
+    echo
+
+    "$@"
+    local status=$?
+
+    if [[ $status -ne 0 ]]; then
+        echo
+        echo "FAILED: $name"
+        echo "Exit status: $status"
+        exit "$status"
+    fi
+
+    echo
+    echo "PASS: $name"
+}
+
+require_command() {
+    local command_name="$1"
+
+    if ! command -v "$command_name" >/dev/null 2>&1; then
+        echo "error: required command not found: $command_name" >&2
+        exit 127
+    fi
+}
+
+require_repo_root() {
+    if [[ ! -f Cargo.toml ]]; then
+        echo "error: run this script from the enclave repository root" >&2
+        exit 1
+    fi
+
+    if [[ ! -f crates/enclave-macros/Cargo.toml ]]; then
+        echo "error: this does not appear to be the enclave workspace" >&2
+        exit 1
+    fi
+}
+
+require_clean_tree() {
+    local status_output
+
+    status_output="$(git status --porcelain)"
+
+    if [[ -n "$status_output" ]]; then
+        echo
+        print_rule
+        echo " RELEASE TREE IS NOT CLEAN"
+        print_rule
+        echo
+        printf '%s\n' "$status_output"
+        echo
+        echo "Release dry-runs must be executed from a clean committed tree."
+        exit 1
+    fi
+
+    echo
+    echo "PASS: working tree is clean"
+}
+
+check_msrv_toolchain() {
+    if ! rustup toolchain list | grep -Eq "^${msrv}([[:space:]-]|$)"; then
+        echo
+        echo "error: Rust $msrv toolchain is not installed" >&2
+        echo
+        echo "Install it with:"
+        echo
+        echo "  rustup toolchain install $msrv"
+        exit 1
+    fi
+}
+
+run_quick_gates() {
+    run_gate \
+        "Unstaged whitespace" \
+        git diff --check
+
+    run_gate \
+        "Staged whitespace" \
+        git diff --cached --check
+
+    run_gate \
+        "Formatting" \
+        cargo fmt --all -- --check
+
+    run_gate \
+        "Workspace check" \
+        cargo check \
+            --workspace \
+            --all-targets \
+            --all-features
+
+    run_gate \
+        "Workspace Clippy" \
+        cargo clippy \
+            --workspace \
+            --all-targets \
+            --all-features \
+            -- \
+            -D warnings
+}
+
+run_full_gates() {
+    run_quick_gates
+
+    run_gate \
+        "Workspace tests" \
+        cargo test \
+            --workspace \
+            --all-targets \
+            --all-features
+
+    run_gate \
+        "Workspace doctests" \
+        cargo test \
+            --workspace \
+            --doc \
+            --all-features
+
+    run_gate \
+        "Strict rustdoc (workspace)" \
+        env RUSTDOCFLAGS="-D warnings" \
+        cargo doc \
+            --workspace \
+            --no-deps \
+            --all-features
+
+    echo
+    print_rule
+    echo " CRATE-LOCAL STRICT RUSTDOC"
+    print_rule
+
+    local package
+
+    for package in "${packages[@]}"; do
+        run_gate \
+            "Strict rustdoc: $package" \
+            env RUSTDOCFLAGS="-D warnings" \
+            cargo doc \
+                -p "$package" \
+                --no-deps \
+                --all-features
+    done
+
+    echo
+    print_rule
+    echo " ROOT FEATURE MATRIX"
+    print_rule
+
+    local feature
+
+    for feature in "${root_features[@]}"; do
+        run_gate \
+            "Feature: $feature" \
+            cargo check \
+                -p enclave \
+                --no-default-features \
+                --features "$feature" \
+                --all-targets
+    done
+
+    echo
+    print_rule
+    echo " PACKAGE CONTENTS"
+    print_rule
+
+    for package in "${packages[@]}"; do
+        run_gate \
+            "Package contents: $package" \
+            cargo package \
+                --allow-dirty \
+                --list \
+                -p "$package"
+    done
+
+    check_msrv_toolchain
+
+    run_gate \
+        "MSRV workspace check" \
+        cargo +"$msrv" check \
+            --workspace \
+            --all-targets \
+            --all-features
+
+    run_gate \
+        "MSRV workspace tests" \
+        cargo +"$msrv" test \
+            --workspace \
+            --all-targets \
+            --all-features
+
+    run_gate \
+        "MSRV doctests" \
+        cargo +"$msrv" test \
+            --workspace \
+            --doc \
+            --all-features
+
+    run_gate \
+        "MSRV strict rustdoc" \
+        env RUSTDOCFLAGS="-D warnings" \
+        cargo +"$msrv" doc \
+            --workspace \
+            --no-deps \
+            --all-features
+}
+
+run_core_release() {
+    run_full_gates
+
+    echo
+    print_rule
+    echo " ENCLAVE CORE RELEASE GATE"
+    print_rule
+
+    require_clean_tree
+
+    run_gate \
+        "enclave package verification" \
+        cargo package \
+            -p enclave
+
+    run_gate \
+        "enclave publish dry run" \
+        cargo publish \
+            --dry-run \
+            -p enclave
+}
+
+run_macros_release() {
+    run_full_gates
+
+    echo
+    print_rule
+    echo " ENCLAVE-MACROS RELEASE GATE"
+    print_rule
+
+    require_clean_tree
+
+    run_gate \
+        "enclave-macros package verification" \
+        cargo package \
+            -p enclave-macros
+
+    run_gate \
+        "enclave-macros publish dry run" \
+        cargo publish \
+            --dry-run \
+            -p enclave-macros
+}
+
+require_command cargo
+require_command git
+require_command rustup
+require_repo_root
+
+echo
+print_rule
+echo " ENCLAVE RELEASE GATES"
+print_rule
+echo
+echo "Mode       : $mode"
+echo "Repository : $(pwd)"
+echo "Revision   : $(git rev-parse --short HEAD 2>/dev/null || echo '(no commits yet)')"
+echo "Branch     : $(git branch --show-current 2>/dev/null || echo '(none)')"
+echo "MSRV       : $msrv"
+
+case "$mode" in
+    quick)
+        run_quick_gates
+        ;;
+
+    full)
+        run_full_gates
+        ;;
+
+    core)
+        run_core_release
+        ;;
+
+    macros)
+        run_macros_release
+        ;;
+
+    *)
+        echo
+        echo "Usage:"
+        echo "  ./scripts/release-gates quick"
+        echo "  ./scripts/release-gates full"
+        echo "  ./scripts/release-gates core"
+        echo "  ./scripts/release-gates macros"
+        echo
+        exit 2
+        ;;
+esac
+
+echo
+print_rule
+echo " ALL REQUESTED ENCLAVE GATES GREEN"
+print_rule
+echo

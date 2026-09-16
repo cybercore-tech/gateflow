@@ -1,0 +1,21 @@
+[package]
+name = "enclave-macros"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+description = "Procedural test-attribute macro for enclave sandboxed tests."
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/darkstardevx/enclave"
+homepage = "https://github.com/darkstardevx/enclave"
+documentation = "https://docs.rs/enclave-macros"
+readme = "README.md"
+keywords = ["sandbox", "testing", "proc-macro"]
+categories = ["development-tools::procedural-macro-helpers"]
+
+[lib]
+proc-macro = true
+
+[dependencies]
+proc-macro2 = "1"
+quote = "1"
+syn = { version = "2", features = ["full"] }
