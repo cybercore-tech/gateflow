@@ -7,7 +7,7 @@
 
 Crates like [`turmoil`](https://docs.rs/turmoil) and [`madsim`](https://docs.rs/madsim) get you fast, deterministic network tests by *simulating* the network in userspace. `gateflow` takes the opposite trade: real kernel network namespaces, real sockets, real `tc netem` chaos — slower, but nothing is faked. If a test passes here, it passed against the same networking stack production actually runs on.
 
-> ⚠️ **Early and incomplete.** Namespace creation and real `tc netem` chaos on the sandbox's own loopback both work and are tested. Interface wiring (veth pairs, for chaos *between* sandboxed namespaces) and resource limits (cgroups v2) are not built yet — see [Roadmap](#roadmap). Treat this as a learning project in progress, not a released tool.
+> ⚠️ **Early and incomplete.** Namespace creation, real `tc netem` chaos on the sandbox's own loopback, and real veth-pair connectivity *between* two sandboxed namespaces all work and are tested. Resource limits (cgroups v2) and a seccomp-bpf profile are not built yet — see [Roadmap](#roadmap). Treat this as a learning project in progress, not a released tool.
 
 ## Why not just simulate it?
 
@@ -69,6 +69,28 @@ fork_and_enter_with_chaos(netem, || {
 
 Not yet wired into the `#[gateflow::isolated_net]` macro (no attribute syntax for chaos parameters yet) — drive `fork_and_enter_with_chaos` directly for now.
 
+### Real connectivity between two sandboxes
+
+Two namespaced processes, wired together by a real veth pair, without host `CAP_NET_ADMIN` — the second namespace is owned by the *same* user namespace the first one created, not the host's:
+
+```rust,ignore
+use gateflow::veth::{fork_veth_pair, VethEnd};
+
+let (a_code, b_code) = fork_veth_pair(
+    |end: VethEnd| {
+        // end.address / end.peer_address are real, reachable only
+        // through the veth link — nothing else bridges these two
+        // namespaces.
+        0
+    },
+    |end: VethEnd| {
+        0
+    },
+)?;
+```
+
+See [`gateflow::veth`](src/veth.rs) for the exact process shape (a fork of a fork, not two siblings — that's what makes both namespaces share one owning user namespace) and the full sentinel-code table for diagnosing a setup failure on either side.
+
 ## Architecture
 
 ```text
@@ -100,8 +122,9 @@ Deliberately narrow right now, on purpose — the predecessor design this grew o
 - [x] Unprivileged user + network namespace creation (`src/netns.rs`), `lo` brought up automatically
 - [x] `#[gateflow::isolated_net]` test-attribute macro
 - [x] Real chaos via `tc qdisc netem` on the sandbox's own loopback (`src/chaos.rs`, `fork_and_enter_with_chaos`) — loss / latency / jitter / reordering / corruption / duplication, real kernel enforcement, verified against actual measured delay
-- [ ] veth pair wiring via netlink (no shelling out to `ip`) — needed for chaos *between* two sandboxed namespaces, not just within one
+- [x] veth pair wiring via netlink (`src/veth.rs`, `fork_veth_pair`) — real connectivity between two sandboxed namespaces under one shared user namespace, no host `CAP_NET_ADMIN`, verified with a real UDP round trip
 - [ ] Chaos parameters on the `#[gateflow::isolated_net]` macro itself (currently `fork_and_enter_with_chaos` only)
+- [ ] `tc netem` on the veth link itself, not just loopback — now that real inter-sandbox connectivity exists
 - [ ] cgroups v2 resource limits per test
 - [ ] Optional seccomp-bpf profile per sandboxed test
 - [ ] Publish to crates.io (name confirmed available as `gateflow`/`gateflow-macros`, not yet registered)

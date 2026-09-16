@@ -35,6 +35,11 @@ pub enum Error {
     /// A netlink operation (bringing an interface up, applying `tc netem`)
     /// failed.
     Netlink(nlink::Error),
+
+    /// Creating, reading, or writing one of the coordination pipes
+    /// [`crate::veth::fork_veth_pair`] uses to sequence two forked
+    /// namespaces' setup failed.
+    Pipe(nix::Error),
 }
 
 impl fmt::Display for Error {
@@ -49,6 +54,7 @@ impl fmt::Display for Error {
             Error::IdMap { path, source } => write!(f, "failed writing {path}: {source}"),
             Error::Runtime(err) => write!(f, "failed to build the netlink setup runtime: {err}"),
             Error::Netlink(err) => write!(f, "netlink operation failed: {err}"),
+            Error::Pipe(err) => write!(f, "coordination pipe failed: {err}"),
         }
     }
 }
@@ -56,7 +62,9 @@ impl fmt::Display for Error {
 impl std::error::Error for Error {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            Error::Namespace(err) | Error::Fork(err) | Error::Wait(err) => Some(err),
+            Error::Namespace(err) | Error::Fork(err) | Error::Wait(err) | Error::Pipe(err) => {
+                Some(err)
+            }
             Error::IdMap { source, .. } => Some(source),
             Error::Runtime(source) => Some(source),
             Error::Netlink(err) => Some(err),

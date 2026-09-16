@@ -34,6 +34,7 @@ compile_error!(
 pub mod chaos;
 pub mod error;
 pub mod netns;
+pub mod veth;
 
 pub use error::Error;
 

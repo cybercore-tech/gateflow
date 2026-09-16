@@ -97,6 +97,21 @@ fn write_proc_self(path: &'static str, contents: &str) -> Result<(), Error> {
     fs::write(path, contents).map_err(|source| Error::IdMap { path, source })
 }
 
+/// Enters a fresh network namespace *without* creating a new user
+/// namespace — for a process that has already inherited unprivileged
+/// root via a fork from something that called
+/// [`enter_unprivileged_net_namespace`]. Two such namespaces, entered by
+/// a process and its own further fork, are both owned by the same user
+/// namespace — required for [`crate::veth::fork_veth_pair`] to be able
+/// to move a veth pair's peer end into the second one without host
+/// `CAP_NET_ADMIN`. Calling this in a process that never went through
+/// `enter_unprivileged_net_namespace` (or a descendant of one) will fail
+/// the same way `enter_unprivileged_net_namespace` itself does on a host
+/// with unprivileged user namespaces disabled.
+pub fn enter_sibling_net_namespace() -> Result<(), Error> {
+    unshare(CloneFlags::CLONE_NEWNET).map_err(Error::Namespace)
+}
+
 /// Forks the current process and enters an unprivileged net namespace in
 /// the child, immediately after `fork(2)` — see the [module docs](self)
 /// for why the fork is necessary at all. Unlike calling
