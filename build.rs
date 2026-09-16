@@ -18,16 +18,15 @@
 //! //-END
 //! ```
 //!
-//! Tags: `NOTES` (context/rationale), `DOCS` (should become real `///`
-//! docs eventually), `FIX` (a known defect), `AI` (context specifically
-//! for an AI assistant working in this code — a decision it made, or
-//! something it should know before touching this area again), `DEV`
-//! (developer-facing operational notes: setup, local testing, workflow —
-//! distinct from `NOTES`' design rationale), `STYLE` (a stylistic
-//! convention worth staying consistent with), `RISK` (a way something
-//! can go wrong if changed carelessly — security/isolation-boundary
-//! reasoning is the main case here, but not the only one, so this is
-//! broader than a `SEC`-only bucket would be).
+//! Tags: `NOTES` (context/rationale — including AI-collaboration
+//! context and developer-operational notes; those were split out as
+//! `AI`/`DEV` briefly and folded back in, the boundary wasn't earning
+//! its keep), `DOCS` (should become real `///` docs eventually), `FIX`
+//! (a known defect), `STYLE` (a stylistic convention worth staying
+//! consistent with), `RISK` (a way something can go wrong if changed
+//! carelessly — security/isolation-boundary reasoning is the main case
+//! here, but not the only one, so this is broader than a `SEC`-only
+//! bucket would be).
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -106,8 +105,6 @@ fn main() {
         create_rule("NOTES", "docs/src/notes"),
         create_rule("DOCS", "docs/src/docs-owed"),
         create_rule("FIX", "docs/src/fixes"),
-        create_rule("AI", "docs/src/ai"),
-        create_rule("DEV", "docs/src/dev"),
         create_rule("STYLE", "docs/src/style"),
         create_rule("RISK", "docs/src/risk"),
     ];
@@ -184,7 +181,7 @@ fn scaffold_book() {
             readme,
             "# gateflow dev notes\n\n\
              Maintainer-only notes extracted from `//-NOTES`/`//-DOCS`/`//-FIX`/\
-             `//-AI`/`//-DEV`/`//-STYLE`/`//-RISK` comments in source by \
+             `//-STYLE`/`//-RISK` comments in source by \
              `build.rs`. Regenerated on \
              every `cargo build`/`check`/`test` — never hand-edit the generated \
              pages, only this README and `book.toml` survive a rebuild.\n\n\
@@ -225,8 +222,6 @@ fn generate_summary(rules: &[TagRule]) {
                 "NOTES" => "Notes",
                 "DOCS" => "Docs Owed",
                 "FIX" => "Known Fixes",
-                "AI" => "AI Notes",
-                "DEV" => "Developer Notes",
                 "STYLE" => "Style Notes",
                 "RISK" => "Known Risks",
                 other => other,

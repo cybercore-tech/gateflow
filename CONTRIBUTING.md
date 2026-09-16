@@ -157,11 +157,9 @@ Tags, and what each means:
 
 | Tag | Use it for |
 |---|---|
-| `NOTES` | General context/rationale worth surfacing beyond an inline comment |
+| `NOTES` | General context/rationale worth surfacing beyond an inline comment — including AI-collaboration context and developer-operational notes; those were split into their own `AI`/`DEV` tags briefly and folded back in, the boundary wasn't earning its keep |
 | `DOCS` | A reminder that this needs real `///` rustdoc written eventually |
 | `FIX` | A known defect or gap |
-| `AI` | Context specifically for an AI assistant working in this code — a decision it made, or something it should know before touching this area again |
-| `DEV` | Developer-facing operational notes: setup, local testing, workflow — distinct from `NOTES`' design rationale |
 | `STYLE` | A stylistic convention worth staying consistent with |
 | `RISK` | A way something can go wrong if changed carelessly — security/isolation-boundary reasoning is the main case here, but not the only one |
 
