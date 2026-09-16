@@ -89,19 +89,27 @@ Two namespaced processes, wired together by a real veth pair, without host `CAP_
 ```rust,ignore
 use gateflow::Sandbox;
 use gateflow::veth::VethEnd;
+use std::time::Duration;
 
 let (a_code, b_code) = Sandbox::paired().enter(
     |end: VethEnd| {
         // end.address / end.peer_address are real, reachable only
         // through the veth link — nothing else bridges these two
-        // namespaces.
+        // namespaces. Do real work here, then signal it's done
+        // instead of making the peer guess how long to wait.
+        end.signal_done().unwrap();
         0
     },
     |end: VethEnd| {
+        if !end.wait_for_peer(Duration::from_secs(5)).unwrap() {
+            return 1; // A never signaled within the timeout
+        }
         0
     },
 )?;
 ```
+
+`end.signal_done()` / `end.wait_for_peer(timeout)` are a real cross-process completion signal — `a_fn`/`b_fn` run in separate forked processes with no shared memory, so without this, a caller has no way to know when the other side has actually finished, only to guess with a fixed sleep. Found to be a real gap (not a hypothetical one) by dogfooding `gateflow` on [GhostPort](https://github.com/darkstardevx/ghostport), which originally had to work around the missing signal with a fixed 3-second sleep.
 
 `Sandbox::paired()` doesn't accept `.chaos(..)` yet — combining loopback chaos with a paired sandbox is a real, untested combination, not just a reshape of what's already proven, so it's deliberately left out for now (enforced at compile time: `PairedSandbox` has no `chaos` method).
 
@@ -143,6 +151,7 @@ Deliberately narrow right now, on purpose — the predecessor design this grew o
 - [x] Real chaos via `tc qdisc netem` on the sandbox's own loopback (`src/chaos.rs`, `fork_and_enter_with_chaos`) — loss / latency / jitter / reordering / corruption / duplication, real kernel enforcement, verified against actual measured delay
 - [x] veth pair wiring via netlink (`src/veth.rs`, `fork_veth_pair`) — real connectivity between two sandboxed namespaces under one shared user namespace, no host `CAP_NET_ADMIN`, verified with a real UDP round trip
 - [x] `Sandbox`/`PairedSandbox` (`src/sandbox.rs`) — one composable entry point over the three growing `fork_*` functions, done before cgroups added a fourth dimension and the combinations multiplied; the macro now expands through it too, not a separate path
+- [x] `VethEnd::signal_done`/`wait_for_peer` — a real cross-process completion signal for `PairedSandbox`, closing a gap found by dogfooding on GhostPort (its test previously had to fall back on a fixed sleep)
 - [ ] Chaos parameters on the `#[gateflow::isolated_net]` macro itself (currently `Sandbox::new().chaos(..)` only)
 - [ ] `tc netem` on the veth link itself, not just loopback — now that real inter-sandbox connectivity exists
 - [ ] cgroups v2 resource limits per test

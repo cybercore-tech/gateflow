@@ -25,13 +25,25 @@
 //!    `waitpid`s `A`; `A` reaps `B` itself and relays the result, since
 //!    `B` is `A`'s child, not the coordinator's).
 //!
-//! All three pipes are created once, up front, by the coordinator, so
-//! every descendant inherits every fd it needs through *both* forks —
-//! each process then closes the ends it doesn't use itself.
+//! A fifth and sixth pipe (per direction: one each way) back
+//! [`VethEnd::signal_done`]/[`VethEnd::wait_for_peer`] — `a_fn`/`b_fn`
+//! run in the same two forked processes with no shared memory, so
+//! without an explicit signal, neither side has any way to know when
+//! the other has finished its own work. Found to be a real, not
+//! hypothetical, gap by using this crate on real code (see darknotes'
+//! GhostPort note): a caller without it has to fall back on a fixed
+//! sleep, guessing how long the peer's work usually takes instead of
+//! knowing when it's actually done.
+//!
+//! All pipes are created once, up front, by the coordinator, so every
+//! descendant inherits every fd it needs through *both* forks — each
+//! process then closes the ends it doesn't use itself.
 
 use std::net::Ipv4Addr;
 use std::os::fd::OwnedFd;
+use std::time::{Duration, Instant};
 
+use nix::fcntl::{FcntlArg, OFlag, fcntl};
 use nix::sys::wait::{WaitStatus, waitpid};
 use nix::unistd::{ForkResult, Pid, fork, pipe, read, write};
 use nlink::netlink::link::VethLink;
@@ -51,9 +63,16 @@ const IFACE_A: &str = "veth-a";
 const IFACE_B: &str = "veth-b";
 
 /// Everything one side of a veth-connected namespace pair needs to use
-/// its end: the interface name (already up, address already assigned)
-/// and both addresses.
-#[derive(Debug, Clone)]
+/// its end: the interface name (already up, address already assigned),
+/// both addresses, and a way to synchronize with the peer side — the
+/// two closures given to [`fork_veth_pair`] run in separate forked
+/// processes with no shared memory, so without this there is no way for
+/// one side to know when the other has finished (or reached some point
+/// in) its own work.
+///
+/// Not `Clone` — the completion-signal pipe ends are unique per process,
+/// same reason [`std::fs::File`] isn't `Clone` either.
+#[derive(Debug)]
 pub struct VethEnd {
     /// The local interface name (`veth-a` or `veth-b`), already up.
     pub interface: &'static str,
@@ -61,6 +80,69 @@ pub struct VethEnd {
     pub address: Ipv4Addr,
     /// The peer's address — what to actually connect/send to.
     pub peer_address: Ipv4Addr,
+    my_done_w: OwnedFd,
+    peer_done_r: OwnedFd,
+}
+
+impl VethEnd {
+    /// Signals to the peer side that this side has finished its work.
+    /// Idempotent to call at most once per side in practice (a second
+    /// call still just writes a byte nobody's necessarily still reading
+    /// for) — there's no protocol here beyond "at least one signal
+    /// happened."
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::Pipe`] if the underlying write fails — this
+    /// would mean the peer process is already gone (its read end
+    /// closed), not a transient condition worth retrying.
+    pub fn signal_done(&self) -> Result<(), Error> {
+        write(&self.my_done_w, &[1u8]).map_err(Error::Pipe)?;
+        Ok(())
+    }
+
+    /// Blocks until the peer side calls [`VethEnd::signal_done`], or
+    /// `timeout` elapses. A timeout returns `Ok(false)`, not an error —
+    /// it's an ordinary, expected outcome for a caller polling/retrying
+    /// on its own terms, not a failure of the mechanism itself.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::Pipe`] if the underlying read fails for a reason
+    /// other than "no data yet" (a genuine OS-level error, not a normal
+    /// timeout).
+    pub fn wait_for_peer(&self, timeout: Duration) -> Result<bool, Error> {
+        let deadline = Instant::now() + timeout;
+        let mut buf = [0u8; 1];
+        loop {
+            match read(&self.peer_done_r, &mut buf) {
+                Ok(1) => return Ok(true),
+                // EOF: the peer exited without ever signaling. Not a
+                // pipe error — there's simply never going to be a
+                // signal now, so this is a normal "no" rather than
+                // something to retry until the timeout.
+                Ok(_) => return Ok(false),
+                Err(nix::Error::EAGAIN) => {
+                    if Instant::now() >= deadline {
+                        return Ok(false);
+                    }
+                    std::thread::sleep(Duration::from_millis(20));
+                }
+                Err(e) => return Err(Error::Pipe(e)),
+            }
+        }
+    }
+}
+
+/// Marks a pipe's read end non-blocking so [`VethEnd::wait_for_peer`]
+/// can poll it with a real deadline instead of blocking forever on a
+/// peer that might already be gone.
+fn set_nonblocking(fd: &OwnedFd) -> Result<(), Error> {
+    let flags = fcntl(fd, FcntlArg::F_GETFL).map_err(Error::Pipe)?;
+    let mut oflags = OFlag::from_bits_truncate(flags);
+    oflags.insert(OFlag::O_NONBLOCK);
+    fcntl(fd, FcntlArg::F_SETFL(oflags)).map_err(Error::Pipe)?;
+    Ok(())
 }
 
 /// The pipe fds one side keeps past its own fork point, bundled so
@@ -71,12 +153,20 @@ struct SideAPipes {
     wire_done_w: OwnedFd,
     b_end_up_r: OwnedFd,
     b_result_w: OwnedFd,
+    /// A's end of the completion-signal pipes, handed to `a_fn` inside
+    /// its `VethEnd` — not used by `run_side_a` itself.
+    a_done_w: OwnedFd,
+    b_done_r: OwnedFd,
 }
 
 struct SideBPipes {
     b_ready_w: OwnedFd,
     wire_done_r: OwnedFd,
     b_end_up_w: OwnedFd,
+    /// B's end of the completion-signal pipes, handed to `b_fn` inside
+    /// its `VethEnd` — not used by `run_side_b` itself.
+    b_done_w: OwnedFd,
+    a_done_r: OwnedFd,
 }
 
 /// Forks two namespaces wired together by a real veth pair (see the
@@ -127,6 +217,8 @@ where
     let (wire_done_r, wire_done_w) = pipe().map_err(Error::Pipe)?;
     let (b_end_up_r, b_end_up_w) = pipe().map_err(Error::Pipe)?;
     let (b_result_r, b_result_w) = pipe().map_err(Error::Pipe)?;
+    let (a_done_r, a_done_w) = pipe().map_err(Error::Pipe)?;
+    let (b_done_r, b_done_w) = pipe().map_err(Error::Pipe)?;
 
     // SAFETY: see the equivalent comment in
     // netns.rs::fork_and_enter_inner — the same accepted tradeoff
@@ -142,6 +234,10 @@ where
             drop(b_end_up_r);
             drop(b_end_up_w);
             drop(b_result_w);
+            drop(a_done_r);
+            drop(a_done_w);
+            drop(b_done_r);
+            drop(b_done_w);
 
             let a_code = match waitpid(a_pid, None).map_err(Error::Wait)? {
                 WaitStatus::Exited(_, code) => code,
@@ -168,11 +264,15 @@ where
                     wire_done_w,
                     b_end_up_r,
                     b_result_w,
+                    a_done_w,
+                    b_done_r,
                 },
                 SideBPipes {
                     b_ready_w,
                     wire_done_r,
                     b_end_up_w,
+                    b_done_w,
+                    a_done_r,
                 },
                 a_fn,
                 b_fn,
@@ -203,6 +303,8 @@ where
             drop(a_pipes.wire_done_w);
             drop(a_pipes.b_end_up_r);
             drop(a_pipes.b_result_w);
+            drop(a_pipes.a_done_w);
+            drop(a_pipes.b_done_r);
             let code = run_side_b(a_pipes.b_ready_r, b_pipes, b_fn);
             std::process::exit(code);
         }
@@ -214,6 +316,8 @@ where
     drop(b_pipes.b_ready_w);
     drop(b_pipes.wire_done_r);
     drop(b_pipes.b_end_up_w);
+    drop(b_pipes.b_done_w);
+    drop(b_pipes.a_done_r);
 
     let mut ready_buf = [0u8; 1];
     match read(&a_pipes.b_ready_r, &mut ready_buf) {
@@ -221,7 +325,7 @@ where
         _ => return 123,
     }
 
-    let end_a = match configure_side_a(b_pid) {
+    let end_a = match configure_side_a(b_pid, a_pipes.a_done_w, a_pipes.b_done_r) {
         Ok(end) => end,
         Err(_) => return 124,
     };
@@ -302,7 +406,7 @@ where
         _ => return 133,
     }
 
-    let end_b = match configure_side_b() {
+    let end_b = match configure_side_b(pipes.b_done_w, pipes.a_done_r) {
         Ok(end) => end,
         Err(_) => return 134,
     };
@@ -319,7 +423,13 @@ where
 /// nothing to amortize) and, inside it: creates the veth pair with the
 /// peer end landing directly in `peer_pid`'s namespace, assigns and
 /// brings up this side's end, and brings up `lo`.
-fn configure_side_a(peer_pid: Pid) -> Result<VethEnd, Error> {
+fn configure_side_a(
+    peer_pid: Pid,
+    my_done_w: OwnedFd,
+    peer_done_r: OwnedFd,
+) -> Result<VethEnd, Error> {
+    set_nonblocking(&peer_done_r)?;
+
     let runtime = tokio::runtime::Runtime::new().map_err(Error::Runtime)?;
     runtime.block_on(async {
         let conn = Connection::<Route>::new().map_err(Error::Netlink)?;
@@ -343,6 +453,8 @@ fn configure_side_a(peer_pid: Pid) -> Result<VethEnd, Error> {
             interface: IFACE_A,
             address: ADDR_A,
             peer_address: ADDR_B,
+            my_done_w,
+            peer_done_r,
         })
     })
 }
@@ -350,7 +462,9 @@ fn configure_side_a(peer_pid: Pid) -> Result<VethEnd, Error> {
 /// Same shape as [`configure_side_a`] but for B's side: `veth-b` already
 /// exists in this namespace (A created it there directly via
 /// `peer_netns_pid`), so B only assigns its address and brings things up.
-fn configure_side_b() -> Result<VethEnd, Error> {
+fn configure_side_b(my_done_w: OwnedFd, peer_done_r: OwnedFd) -> Result<VethEnd, Error> {
+    set_nonblocking(&peer_done_r)?;
+
     let runtime = tokio::runtime::Runtime::new().map_err(Error::Runtime)?;
     runtime.block_on(async {
         let conn = Connection::<Route>::new().map_err(Error::Netlink)?;
@@ -369,6 +483,8 @@ fn configure_side_b() -> Result<VethEnd, Error> {
             interface: IFACE_B,
             address: ADDR_B,
             peer_address: ADDR_A,
+            my_done_w,
+            peer_done_r,
         })
     })
 }
@@ -376,7 +492,7 @@ fn configure_side_b() -> Result<VethEnd, Error> {
 #[cfg(test)]
 mod tests {
     use std::net::UdpSocket;
-    use std::time::Duration;
+    use std::time::{Duration, Instant};
 
     use super::*;
 
@@ -469,5 +585,93 @@ mod tests {
             b_code, 0,
             "side B did not complete the ping/pong (code {b_code})"
         );
+    }
+
+    /// Proves `signal_done`/`wait_for_peer` genuinely synchronize, not
+    /// just that they return successfully: A deliberately delays before
+    /// signaling, B measures how long its wait actually took. If
+    /// `wait_for_peer` were a no-op that just returned `true`
+    /// immediately, this would fail the elapsed-time assertion even
+    /// though the boolean result would look correct.
+    #[test]
+    fn veth_end_signal_done_and_wait_for_peer_synchronizes() {
+        let (a_code, b_code) = fork_veth_pair(
+            |end: VethEnd| {
+                std::thread::sleep(Duration::from_millis(300));
+                if end.signal_done().is_err() {
+                    return 2;
+                }
+                0
+            },
+            |end: VethEnd| {
+                let start = Instant::now();
+                let signaled = match end.wait_for_peer(Duration::from_secs(2)) {
+                    Ok(s) => s,
+                    Err(_) => return 3,
+                };
+                let elapsed = start.elapsed();
+
+                if !signaled {
+                    return 4;
+                }
+                // Generous lower bound under A's real 300ms delay, to
+                // absorb scheduling jitter while still failing hard if
+                // wait_for_peer returned near-instantly regardless of
+                // when A actually signaled.
+                if elapsed < Duration::from_millis(200) {
+                    eprintln!(
+                        "gateflow test: wait_for_peer returned after only {elapsed:?}, expected close to 300ms"
+                    );
+                    return 5;
+                }
+                0
+            },
+        )
+        .expect("fork_veth_pair should run to completion");
+
+        assert_eq!(a_code, 0, "side A failed (code {a_code})");
+        assert_eq!(b_code, 0, "side B failed (code {b_code})");
+    }
+
+    /// Proves `wait_for_peer` actually enforces its timeout instead of
+    /// hanging or returning instantly: A deliberately holds its end of
+    /// the pipe open (without signaling) for longer than B's timeout, so
+    /// B has to hit real `EAGAIN`-and-retry cycles until its own
+    /// deadline, not an immediate EOF short-circuit from A exiting
+    /// early.
+    #[test]
+    fn veth_end_wait_for_peer_times_out_if_peer_never_signals() {
+        let (a_code, b_code) = fork_veth_pair(
+            |_end: VethEnd| {
+                // Deliberately never calls signal_done — and stays
+                // alive well past B's timeout so B can't shortcut via
+                // EOF instead of a real timeout.
+                std::thread::sleep(Duration::from_secs(1));
+                0
+            },
+            |end: VethEnd| {
+                let start = Instant::now();
+                let signaled = match end.wait_for_peer(Duration::from_millis(300)) {
+                    Ok(s) => s,
+                    Err(_) => return 2,
+                };
+                let elapsed = start.elapsed();
+
+                if signaled {
+                    return 3;
+                }
+                if elapsed < Duration::from_millis(250) || elapsed > Duration::from_millis(700) {
+                    eprintln!(
+                        "gateflow test: wait_for_peer took {elapsed:?}, expected close to 300ms"
+                    );
+                    return 4;
+                }
+                0
+            },
+        )
+        .expect("fork_veth_pair should run to completion");
+
+        assert_eq!(a_code, 0, "side A failed (code {a_code})");
+        assert_eq!(b_code, 0, "side B failed (code {b_code})");
     }
 }
