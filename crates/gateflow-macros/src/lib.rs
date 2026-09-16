@@ -1,7 +1,7 @@
 //! Procedural macro companion to the `gateflow` crate.
 //!
 //! See the `gateflow` crate's own docs for what this actually does; this
-//! crate only expands the attribute — `gateflow::netns::fork_and_enter`
+//! crate only expands the attribute — `gateflow::Sandbox::new().enter(..)`
 //! does the real work.
 
 use proc_macro::TokenStream;
@@ -54,11 +54,12 @@ fn expand(input: ItemFn) -> TokenStream2 {
         #[test]
         #(#attrs)*
         #vis #sig {
-            let __gateflow_exit_code = ::gateflow::netns::fork_and_enter(move || {
-                #block
-                0
-            })
-            .expect("fork_and_enter failed before the sandboxed body could run");
+            let __gateflow_exit_code = ::gateflow::Sandbox::new()
+                .enter(move || {
+                    #block
+                    0
+                })
+                .expect("Sandbox::new().enter failed before the sandboxed body could run");
 
             assert_eq!(
                 __gateflow_exit_code,
@@ -76,7 +77,7 @@ mod tests {
     use super::expand;
 
     #[test]
-    fn wraps_body_in_fork_and_enter() {
+    fn wraps_body_in_sandbox_enter() {
         let input: syn::ItemFn = parse_quote! {
             fn my_test() {
                 assert!(true);
@@ -85,7 +86,8 @@ mod tests {
 
         let expanded = expand(input).to_string();
 
-        assert!(expanded.contains("fork_and_enter"));
+        assert!(expanded.contains("Sandbox :: new"));
+        assert!(expanded.contains(". enter"));
         assert!(expanded.contains("assert_eq"));
     }
 }

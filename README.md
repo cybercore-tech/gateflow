@@ -36,23 +36,36 @@ gateflow = { git = "https://github.com/darkstardevx/gateflow", features = ["macr
 
 ## Quick Start
 
+[`Sandbox`](src/sandbox.rs) is the entry point:
+
+```rust,ignore
+use gateflow::Sandbox;
+
+Sandbox::new().enter(|| {
+    // Runs as uid 0 inside a network namespace nothing else on the host
+    // can see — no host root required to get here.
+    0
+})?;
+```
+
+Or, as sugar for exactly that (no chaos, no pairing), the attribute macro:
+
 ```rust,ignore
 #[gateflow::isolated_net]
 fn sees_its_own_namespace() {
-    // Runs as uid 0 inside a network namespace nothing else on the host
-    // can see — no host root required to get here.
+    // same thing, expands to Sandbox::new().enter(..) under the hood
 }
 ```
 
-Under the hood, `#[gateflow::isolated_net]` expands to a `#[test]` that forks the process and, in the child — which `unshare(2)` requires to be single-threaded, which a normal `cargo test` binary is not — enters a fresh user + network namespace, brings its `lo` up, and runs your test body. See [`gateflow::netns`](src/netns.rs) for the primitive directly, if you want to drive it yourself instead of through the macro.
+Under the hood, both fork the process and, in the child — which `unshare(2)` requires to be single-threaded, which a normal `cargo test` binary is not — enter a fresh user + network namespace, bring its `lo` up, and run your test body.
 
 ### Real kernel chaos, not simulated
 
 `netem` is an *egress* qdisc — loopback traffic still leaves through `lo` on its way back to itself, so a root `netem` qdisc on the sandbox's `lo` really does delay/drop/reorder ordinary `127.0.0.1` traffic:
 
 ```rust,ignore
+use gateflow::Sandbox;
 use gateflow::chaos::{NetemConfig, Percent};
-use gateflow::netns::fork_and_enter_with_chaos;
 use std::time::Duration;
 
 let netem = NetemConfig::new()
@@ -60,23 +73,24 @@ let netem = NetemConfig::new()
     .loss(Percent::new(1.0))
     .build();
 
-fork_and_enter_with_chaos(netem, || {
+Sandbox::new().chaos(netem).enter(|| {
     // sockets bound to 127.0.0.1 in here see real ~100ms delay and
     // ~1% loss, enforced by the kernel — not simulated.
     0
 })?;
 ```
 
-Not yet wired into the `#[gateflow::isolated_net]` macro (no attribute syntax for chaos parameters yet) — drive `fork_and_enter_with_chaos` directly for now.
+Not yet wired into the `#[gateflow::isolated_net]` macro (no attribute syntax for chaos parameters yet) — use `Sandbox::new().chaos(..)` directly for now.
 
 ### Real connectivity between two sandboxes
 
-Two namespaced processes, wired together by a real veth pair, without host `CAP_NET_ADMIN` — the second namespace is owned by the *same* user namespace the first one created, not the host's:
+Two namespaced processes, wired together by a real veth pair, without host `CAP_NET_ADMIN` — the second namespace is owned by the *same* user namespace the first one created, not the host's. Both closures only run once both ends are confirmed up (a real handshake, not a fixed delay):
 
 ```rust,ignore
-use gateflow::veth::{fork_veth_pair, VethEnd};
+use gateflow::Sandbox;
+use gateflow::veth::VethEnd;
 
-let (a_code, b_code) = fork_veth_pair(
+let (a_code, b_code) = Sandbox::paired().enter(
     |end: VethEnd| {
         // end.address / end.peer_address are real, reachable only
         // through the veth link — nothing else bridges these two
@@ -89,31 +103,36 @@ let (a_code, b_code) = fork_veth_pair(
 )?;
 ```
 
-See [`gateflow::veth`](src/veth.rs) for the exact process shape (a fork of a fork, not two siblings — that's what makes both namespaces share one owning user namespace) and the full sentinel-code table for diagnosing a setup failure on either side.
+`Sandbox::paired()` doesn't accept `.chaos(..)` yet — combining loopback chaos with a paired sandbox is a real, untested combination, not just a reshape of what's already proven, so it's deliberately left out for now (enforced at compile time: `PairedSandbox` has no `chaos` method).
+
+See [`gateflow::netns`](src/netns.rs) / [`gateflow::veth`](src/veth.rs) for the primitives `Sandbox` is built on — including the exact process shape (a fork of a fork, not two siblings) and the full sentinel-code tables for diagnosing a setup failure — if you want to drive them directly instead of through the builder.
 
 ## Architecture
 
 ```text
 ┌─────────────────────────┐
-│  #[gateflow::isolated_net]│   proc-macro (crates/gateflow-macros)
-└────────────┬─────────────┘
-             │ expands to
+│   Sandbox::new()          │   src/sandbox.rs — one entry point over
+│     .chaos(..)? .enter()  │   netns/chaos/veth, or Sandbox::paired()
+└────────────┬─────────────┘   for the two-namespace veth form
+             │
              ▼
 ┌─────────────────────────┐
 │   fork(2)                │   parent waits; child is guaranteed
 ├─────────────────────────┤   single-threaded right after fork
 │   unshare(CLONE_NEWUSER  │
-│           | CLONE_NEWNET)│   src/netns.rs — the one real primitive
+│           | CLONE_NEWNET)│   src/netns.rs — the base primitive
 ├─────────────────────────┤
 │   uid_map / gid_map /    │   maps caller to uid 0, gid 0 —
 │   setgroups=deny         │   inside the new namespace only
 ├─────────────────────────┤
 │   lo up (+ netem, if     │   real tc qdisc via nlink —
-│   with_chaos was used)   │   src/chaos.rs
+│   .chaos(..) was used)   │   src/chaos.rs
 ├─────────────────────────┤
 │   your test body runs    │
 └─────────────────────────┘
 ```
+
+`#[gateflow::isolated_net]` (crates/gateflow-macros) expands to exactly `Sandbox::new().enter(..)` — the macro and manual code go through the same path, not two separate ones.
 
 ## Roadmap
 
@@ -123,7 +142,8 @@ Deliberately narrow right now, on purpose — the predecessor design this grew o
 - [x] `#[gateflow::isolated_net]` test-attribute macro
 - [x] Real chaos via `tc qdisc netem` on the sandbox's own loopback (`src/chaos.rs`, `fork_and_enter_with_chaos`) — loss / latency / jitter / reordering / corruption / duplication, real kernel enforcement, verified against actual measured delay
 - [x] veth pair wiring via netlink (`src/veth.rs`, `fork_veth_pair`) — real connectivity between two sandboxed namespaces under one shared user namespace, no host `CAP_NET_ADMIN`, verified with a real UDP round trip
-- [ ] Chaos parameters on the `#[gateflow::isolated_net]` macro itself (currently `fork_and_enter_with_chaos` only)
+- [x] `Sandbox`/`PairedSandbox` (`src/sandbox.rs`) — one composable entry point over the three growing `fork_*` functions, done before cgroups added a fourth dimension and the combinations multiplied; the macro now expands through it too, not a separate path
+- [ ] Chaos parameters on the `#[gateflow::isolated_net]` macro itself (currently `Sandbox::new().chaos(..)` only)
 - [ ] `tc netem` on the veth link itself, not just loopback — now that real inter-sandbox connectivity exists
 - [ ] cgroups v2 resource limits per test
 - [ ] Optional seccomp-bpf profile per sandboxed test
