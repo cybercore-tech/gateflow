@@ -148,7 +148,7 @@ CI (`.github/workflows/ci.yml`) runs the equivalent checks on every push, includ
 Same block-marker convention as the `cyberdeck` project, adapted. A tagged comment:
 
 ```rust
-//-NOTE: Short title
+//-NOTES: Short title
 // Prose content, plain `//` comments, can span multiple lines.
 //-END
 ```
@@ -157,11 +157,13 @@ Tags, and what each means:
 
 | Tag | Use it for |
 |---|---|
-| `NOTE` | General context/rationale worth surfacing beyond an inline comment |
+| `NOTES` | General context/rationale worth surfacing beyond an inline comment |
 | `DOCS` | A reminder that this needs real `///` rustdoc written eventually |
-| `RECS` | A recommendation for later — not urgent, "consider doing X" |
 | `FIX` | A known defect or gap |
-| `SEC` | Security/isolation-boundary reasoning — this crate's whole point is a privilege boundary, so these get their own bucket |
+| `AI` | Context specifically for an AI assistant working in this code — a decision it made, or something it should know before touching this area again |
+| `DEV` | Developer-facing operational notes: setup, local testing, workflow — distinct from `NOTES`' design rationale |
+| `STYLE` | A stylistic convention worth staying consistent with |
+| `RISK` | A way something can go wrong if changed carelessly — security/isolation-boundary reasoning is the main case here, but not the only one |
 
 `build.rs` extracts every tagged block into a local mdBook site at `docs/` on every `cargo build`/`check`/`test` — **maintainer-only, never committed** (`docs/` is gitignored) and **never part of rustdoc** (plain `//` comments never appear there regardless, but the aggregated view is a much more discoverable artifact than scattered source comments, so it stays fully local on top of that). Browse it with `mdbook serve docs` (loopback only) or `mdbook build docs` + open `docs/book/index.html`.
 

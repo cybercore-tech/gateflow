@@ -20,7 +20,7 @@
 //! regardless of how many threads the parent had, so entering the
 //! namespace immediately after fork is safe.
 
-//-RECS: veth pairs need a second namespace, not host CAP_NET_ADMIN
+//-NOTES: veth pairs need a second namespace, not host CAP_NET_ADMIN
 // Real inter-sandbox connectivity (two `fork_and_enter`ed processes
 // actually talking to each other, not just each in isolation) can't be
 // done by wiring a veth pair into the host's root netns — an
@@ -78,7 +78,7 @@ pub fn enter_unprivileged_net_namespace() -> Result<(), Error> {
 
     unshare(CloneFlags::CLONE_NEWUSER | CloneFlags::CLONE_NEWNET).map_err(Error::Namespace)?;
 
-    //-SEC: uid/gid mapping order is load-bearing, not stylistic
+    //-RISK: uid/gid mapping order is load-bearing, not stylistic
     // `setgroups` must be denied *before* `gid_map` is written, or the
     // write fails with EPERM for an unprivileged process — the kernel
     // refuses to let a process claim arbitrary supplementary groups via

@@ -13,16 +13,21 @@
 //! wrapping functional code spans):
 //!
 //! ```text
-//! //-NOTE: Short title
+//! //-NOTES: Short title
 //! // Prose content, plain `//` comments, can span multiple lines.
 //! //-END
 //! ```
 //!
-//! Tags: `NOTE` (context/rationale), `DOCS` (should become real
-//! `///` docs eventually), `RECS` (a recommendation, not urgent),
-//! `FIX` (a known defect), `SEC` (security/isolation-boundary
-//! reasoning — this crate's whole point is a privilege/namespace
-//! boundary, so these are worth their own bucket).
+//! Tags: `NOTES` (context/rationale), `DOCS` (should become real `///`
+//! docs eventually), `FIX` (a known defect), `AI` (context specifically
+//! for an AI assistant working in this code — a decision it made, or
+//! something it should know before touching this area again), `DEV`
+//! (developer-facing operational notes: setup, local testing, workflow —
+//! distinct from `NOTES`' design rationale), `STYLE` (a stylistic
+//! convention worth staying consistent with), `RISK` (a way something
+//! can go wrong if changed carelessly — security/isolation-boundary
+//! reasoning is the main case here, but not the only one, so this is
+//! broader than a `SEC`-only bucket would be).
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -98,11 +103,13 @@ fn main() {
     }
 
     let rules = vec![
-        create_rule("NOTE", "docs/src/notes"),
+        create_rule("NOTES", "docs/src/notes"),
         create_rule("DOCS", "docs/src/docs-owed"),
-        create_rule("RECS", "docs/src/recommendations"),
         create_rule("FIX", "docs/src/fixes"),
-        create_rule("SEC", "docs/src/security"),
+        create_rule("AI", "docs/src/ai"),
+        create_rule("DEV", "docs/src/dev"),
+        create_rule("STYLE", "docs/src/style"),
+        create_rule("RISK", "docs/src/risk"),
     ];
 
     scaffold_book();
@@ -176,8 +183,9 @@ fn scaffold_book() {
         fs::write(
             readme,
             "# gateflow dev notes\n\n\
-             Maintainer-only notes extracted from `//-NOTE`/`//-DOCS`/`//-RECS`/\
-             `//-FIX`/`//-SEC` comments in source by `build.rs`. Regenerated on \
+             Maintainer-only notes extracted from `//-NOTES`/`//-DOCS`/`//-FIX`/\
+             `//-AI`/`//-DEV`/`//-STYLE`/`//-RISK` comments in source by \
+             `build.rs`. Regenerated on \
              every `cargo build`/`check`/`test` — never hand-edit the generated \
              pages, only this README and `book.toml` survive a rebuild.\n\n\
              Never committed (`docs/` is gitignored) and never part of rustdoc — \
@@ -214,11 +222,13 @@ fn generate_summary(rules: &[TagRule]) {
         .iter()
         .map(|r| {
             let header = match r.tag {
-                "NOTE" => "Notes",
+                "NOTES" => "Notes",
                 "DOCS" => "Docs Owed",
-                "RECS" => "Recommendations",
                 "FIX" => "Known Fixes",
-                "SEC" => "Security Notes",
+                "AI" => "AI Notes",
+                "DEV" => "Developer Notes",
+                "STYLE" => "Style Notes",
+                "RISK" => "Known Risks",
                 other => other,
             };
             (r.target_folder.strip_prefix("docs/src/").unwrap(), header)
