@@ -69,12 +69,14 @@ pub struct VethEnd {
 struct SideAPipes {
     b_ready_r: OwnedFd,
     wire_done_w: OwnedFd,
+    b_end_up_r: OwnedFd,
     b_result_w: OwnedFd,
 }
 
 struct SideBPipes {
     b_ready_w: OwnedFd,
     wire_done_r: OwnedFd,
+    b_end_up_w: OwnedFd,
 }
 
 /// Forks two namespaces wired together by a real veth pair (see the
@@ -99,10 +101,12 @@ struct SideBPipes {
 /// | 125 | A | signaling B that wiring is done failed |
 /// | 126 | A | `waitpid` on B failed, or B didn't exit normally |
 /// | 127 | A | relaying B's exit code back to the coordinator failed |
+/// | 128 | A | never heard B confirm its own end is up (B died first) |
 /// | 131 | B | `enter_sibling_net_namespace` failed |
 /// | 132 | B | signaling "namespace ready" to A failed |
 /// | 133 | B | never heard A's "wiring done" signal (A died first) |
 /// | 134 | B | configuring its own veth end failed |
+/// | 135 | B | signaling "my end is up" back to A failed |
 ///
 /// `-1` for `b_fn`'s code specifically means `A` itself never got far
 /// enough to report one (e.g. `A`'s own namespace entry failed before it
@@ -121,6 +125,7 @@ where
 {
     let (b_ready_r, b_ready_w) = pipe().map_err(Error::Pipe)?;
     let (wire_done_r, wire_done_w) = pipe().map_err(Error::Pipe)?;
+    let (b_end_up_r, b_end_up_w) = pipe().map_err(Error::Pipe)?;
     let (b_result_r, b_result_w) = pipe().map_err(Error::Pipe)?;
 
     // SAFETY: see the equivalent comment in
@@ -134,6 +139,8 @@ where
             drop(b_ready_w);
             drop(wire_done_r);
             drop(wire_done_w);
+            drop(b_end_up_r);
+            drop(b_end_up_w);
             drop(b_result_w);
 
             let a_code = match waitpid(a_pid, None).map_err(Error::Wait)? {
@@ -159,11 +166,13 @@ where
                 SideAPipes {
                     b_ready_r,
                     wire_done_w,
+                    b_end_up_r,
                     b_result_w,
                 },
                 SideBPipes {
                     b_ready_w,
                     wire_done_r,
+                    b_end_up_w,
                 },
                 a_fn,
                 b_fn,
@@ -192,6 +201,7 @@ where
         Ok(ForkResult::Child) => {
             // B: doesn't need A's exclusive fds.
             drop(a_pipes.wire_done_w);
+            drop(a_pipes.b_end_up_r);
             drop(a_pipes.b_result_w);
             let code = run_side_b(a_pipes.b_ready_r, b_pipes, b_fn);
             std::process::exit(code);
@@ -203,6 +213,7 @@ where
     // A: doesn't need B's exclusive fds now that B has its own copies.
     drop(b_pipes.b_ready_w);
     drop(b_pipes.wire_done_r);
+    drop(b_pipes.b_end_up_w);
 
     let mut ready_buf = [0u8; 1];
     match read(&a_pipes.b_ready_r, &mut ready_buf) {
@@ -217,6 +228,24 @@ where
 
     if write(&a_pipes.wire_done_w, &[1u8]).is_err() {
         return 125;
+    }
+
+    //-RISK: a_fn must not run until B confirms its own end is up
+    // A veth end has no carrier (state DOWN, route "linkdown") until
+    // *both* ends are administratively up — confirmed by reproducing it
+    // by hand with plain `ip`/`unshare` before trusting it in Rust. A
+    // sendto() through a linkdown route fails synchronously with
+    // ENETUNREACH. Without this barrier, a_fn starts as soon as A's own
+    // end is up, racing B's own (independent, concurrent) setup — real
+    // callers would see intermittent ENETUNREACH depending on scheduling,
+    // not just this crate's own tests. Waiting for B's explicit
+    // confirmation here, not just a fixed delay, makes it a real barrier
+    // instead of a hopeful guess at how long B usually takes.
+    //-END
+    let mut end_up_buf = [0u8; 1];
+    match read(&a_pipes.b_end_up_r, &mut end_up_buf) {
+        Ok(1) => {}
+        _ => return 128,
     }
 
     //-RISK: a_fn must run before waitpid(B), not after
@@ -277,6 +306,10 @@ where
         Ok(end) => end,
         Err(_) => return 134,
     };
+
+    if write(&pipes.b_end_up_w, &[1u8]).is_err() {
+        return 135;
+    }
 
     b_fn(end_b)
 }
@@ -353,11 +386,15 @@ mod tests {
     /// didn't error: A and B are otherwise completely isolated network
     /// namespaces (separate `unshare`s, no shared interfaces besides the
     /// veth pair) — the only way this ping/pong can complete is if the
-    /// veth pair genuinely carries traffic between them. A retries
-    /// sending in a loop because the two sides start their sockets
-    /// concurrently (real fork, real race) with no shared signal for
-    /// "B is listening yet" — a real UDP client's actual situation, not
-    /// a test artifact.
+    /// veth pair genuinely carries traffic between them.
+    ///
+    /// `fork_veth_pair` itself now guarantees both ends are confirmed up
+    /// before either closure runs (see the `//-RISK` note on the
+    /// end-up handshake in `run_side_a`), so this loop's small retry
+    /// budget is ordinary network-test hygiene (first-packet ARP
+    /// resolution, scheduling jitter) — not, as an earlier version of
+    /// this test needed, working around a real carrier race that the
+    /// library left for every caller to hit themselves.
     #[test]
     fn fork_veth_pair_carries_real_udp_traffic() {
         let (a_code, b_code) = fork_veth_pair(
@@ -373,22 +410,11 @@ mod tests {
                     return 3;
                 }
 
-                //-RISK: retry on send errors here too, not just recv timeouts
-                // A veth end has no carrier (state DOWN / route "linkdown")
-                // until *both* ends are administratively up — confirmed by
-                // reproducing this by hand with plain `ip`/`unshare` before
-                // trusting it in Rust. A send_to() through a linkdown route
-                // fails synchronously with ENETUNREACH, which is expected
-                // here (B may still be finishing its own setup) and not a
-                // real failure. Treating a send error as fatal instead of
-                // retryable was the first version of this test and it
-                // failed close to every run — not flaky, just wrong.
-                //-END
                 let peer = (end.peer_address, PORT);
                 let mut buf = [0u8; 4];
-                for _ in 0..50 {
+                for _ in 0..10 {
                     if socket.send_to(b"ping", peer).is_err() {
-                        std::thread::sleep(Duration::from_millis(50));
+                        std::thread::sleep(Duration::from_millis(20));
                         continue;
                     }
                     match socket.recv_from(&mut buf) {
