@@ -1,6 +1,6 @@
-# enclave-macros
+# gateflow-macros
 
-Procedural macro companion to [`enclave`](../..) — provides `#[enclave::isolated_net]`. Not meant to be depended on directly; enable the `macros` feature on the `enclave` crate instead.
+Procedural macro companion to [`gateflow`](../..) — provides `#[gateflow::isolated_net]`. Not meant to be depended on directly; enable the `macros` feature on the `gateflow` crate instead.
 
 ## 🚦 Quality Gate
 

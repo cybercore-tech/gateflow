@@ -30,8 +30,8 @@ Everything lives in one script, `scripts/release-gates`, with a mode argument:
 ```sh
 ./scripts/release-gates quick   # fmt, whitespace, check, clippy — fast, run constantly while developing
 ./scripts/release-gates full    # quick + tests + doctests + strict rustdoc (workspace AND per-crate) + feature matrix + MSRV
-./scripts/release-gates core    # full + package verification + publish dry-run, for the `enclave` crate
-./scripts/release-gates macros  # full + package verification + publish dry-run, for `enclave-macros`
+./scripts/release-gates core    # full + package verification + publish dry-run, for the `gateflow` crate
+./scripts/release-gates macros  # full + package verification + publish dry-run, for `gateflow-macros`
 ```
 
 **Checkpoint complete** (a feature, a fix, a PR, done): run `full` at minimum.
@@ -99,9 +99,9 @@ CI (`.github/workflows/ci.yml`) runs the equivalent checks on every push, includ
 
 **What it does:** Builds the actual docs, with rustdoc's own warnings (broken intra-doc links, malformed doc-comment markup) promoted to hard errors.
 
-**Why both scopes:** The workspace-wide pass (`--workspace`) catches cross-crate breakage — e.g. `enclave-macros` linking to something in `enclave` that got renamed. The crate-local pass (`-p <crate>`) catches what workspace feature unification can mask: a doc/feature bug that only appears when a crate is resolved on its own, which is exactly what a downstream `cargo add enclave` does. **Both are required, not either/or.**
+**Why both scopes:** The workspace-wide pass (`--workspace`) catches cross-crate breakage — e.g. `gateflow-macros` linking to something in `gateflow` that got renamed. The crate-local pass (`-p <crate>`) catches what workspace feature unification can mask: a doc/feature bug that only appears when a crate is resolved on its own, which is exactly what a downstream `cargo add gateflow` does. **Both are required, not either/or.**
 
-**What a failure usually means:** A broken intra-doc link (a renamed/moved item — this bit `enclave-macros` once already, linking to `enclave::netns::fork_and_enter` from a crate that doesn't depend on `enclave`), or invalid doc-comment markup.
+**What a failure usually means:** A broken intra-doc link (a renamed/moved item — this bit `gateflow-macros` once already, linking to `gateflow::netns::fork_and_enter` from a crate that doesn't depend on `gateflow`), or invalid doc-comment markup.
 
 **Fix:** Fix the link or markup. Don't disable the lint to unblock a PR.
 
@@ -111,7 +111,7 @@ CI (`.github/workflows/ci.yml`) runs the equivalent checks on every push, includ
 <details>
 <summary><strong>Root feature matrix</strong></summary>
 
-**What it does:** Checks the `enclave` crate with each feature enabled *alone* (`--no-default-features --features <one>`), not just all-together.
+**What it does:** Checks the `gateflow` crate with each feature enabled *alone* (`--no-default-features --features <one>`), not just all-together.
 
 **What a failure usually means:** A feature that silently depends on another feature being enabled too, only caught because `--all-features` normally masks it.
 
@@ -144,19 +144,19 @@ CI (`.github/workflows/ci.yml`) runs the equivalent checks on every push, includ
 
 ## 📦 Adding a New Companion Crate
 
-1. `cargo new --lib crates/enclave-<name>` and add it to the root `Cargo.toml`'s `[workspace] members`.
+1. `cargo new --lib crates/gateflow-<name>` and add it to the root `Cargo.toml`'s `[workspace] members`.
 2. Add its package name to the `packages` array near the top of `scripts/release-gates`.
 3. If it's release-worthy on its own (not just an internal helper), add a `run_<name>_release` function mirroring `run_macros_release`, and a case in the final `case "$mode"` dispatch.
-4. Add it to the `for package in enclave enclave-macros; do` loops in `.github/workflows/ci.yml` (crate-local strict rustdoc, package contents).
-5. Give it its own `README.md` with a Quality Gate section pointing at `../../scripts/release-gates` and `../../CONTRIBUTING.md`, matching `crates/enclave-macros/README.md`.
+4. Add it to the `for package in gateflow gateflow-macros; do` loops in `.github/workflows/ci.yml` (crate-local strict rustdoc, package contents).
+5. Give it its own `README.md` with a Quality Gate section pointing at `../../scripts/release-gates` and `../../CONTRIBUTING.md`, matching `crates/gateflow-macros/README.md`.
 
 ---
 
 ## 🏁 Release Readiness
 
 ```sh
-./scripts/release-gates core     # release the enclave crate
-./scripts/release-gates macros   # release the enclave-macros crate
+./scripts/release-gates core     # release the gateflow crate
+./scripts/release-gates macros   # release the gateflow-macros crate
 ```
 
 Both require a clean working tree (`require_clean_tree` in the script) and re-run the full gate before ever touching `cargo package`/`cargo publish --dry-run` — "it passed at checkpoint" is not evidence it passes today.

@@ -1,7 +1,7 @@
-//! Procedural macro companion to the `enclave` crate.
+//! Procedural macro companion to the `gateflow` crate.
 //!
-//! See the `enclave` crate's own docs for what this actually does; this
-//! crate only expands the attribute — `enclave::netns::fork_and_enter`
+//! See the `gateflow` crate's own docs for what this actually does; this
+//! crate only expands the attribute — `gateflow::netns::fork_and_enter`
 //! does the real work.
 
 use proc_macro::TokenStream;
@@ -14,9 +14,9 @@ use syn::{ItemFn, parse_macro_input};
 ///
 /// # Requirements
 ///
-/// The `enclave` crate must be a dependency named `enclave` (its default
+/// The `gateflow` crate must be a dependency named `gateflow` (its default
 /// extern crate name) with the `macros` feature enabled, since the
-/// expanded code refers to it by the absolute path `::enclave`.
+/// expanded code refers to it by the absolute path `::gateflow`.
 ///
 /// # Known limitation
 ///
@@ -29,7 +29,7 @@ use syn::{ItemFn, parse_macro_input};
 /// # Example
 ///
 /// ```ignore
-/// #[enclave::isolated_net]
+/// #[gateflow::isolated_net]
 /// fn sees_its_own_namespace() {
 ///     // runs as uid 0 inside a network namespace nothing else can see
 /// }
@@ -54,14 +54,14 @@ fn expand(input: ItemFn) -> TokenStream2 {
         #[test]
         #(#attrs)*
         #vis #sig {
-            let __enclave_exit_code = ::enclave::netns::fork_and_enter(move || {
+            let __gateflow_exit_code = ::gateflow::netns::fork_and_enter(move || {
                 #block
                 0
             })
             .expect("fork_and_enter failed before the sandboxed body could run");
 
             assert_eq!(
-                __enclave_exit_code,
+                __gateflow_exit_code,
                 0,
                 "sandboxed test body failed (see child process stderr above)"
             );

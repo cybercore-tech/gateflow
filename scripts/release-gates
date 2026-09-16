@@ -4,8 +4,8 @@ mode="${1:-full}"
 msrv="1.85.0"
 
 packages=(
-    enclave
-    enclave-macros
+    gateflow
+    gateflow-macros
 )
 
 root_features=(
@@ -51,12 +51,12 @@ require_command() {
 
 require_repo_root() {
     if [[ ! -f Cargo.toml ]]; then
-        echo "error: run this script from the enclave repository root" >&2
+        echo "error: run this script from the gateflow repository root" >&2
         exit 1
     fi
 
-    if [[ ! -f crates/enclave-macros/Cargo.toml ]]; then
-        echo "error: this does not appear to be the enclave workspace" >&2
+    if [[ ! -f crates/gateflow-macros/Cargo.toml ]]; then
+        echo "error: this does not appear to be the gateflow workspace" >&2
         exit 1
     fi
 }
@@ -177,7 +177,7 @@ run_full_gates() {
         run_gate \
             "Feature: $feature" \
             cargo check \
-                -p enclave \
+                -p gateflow \
                 --no-default-features \
                 --features "$feature" \
                 --all-targets
@@ -234,21 +234,21 @@ run_core_release() {
 
     echo
     print_rule
-    echo " ENCLAVE CORE RELEASE GATE"
+    echo " GATEFLOW CORE RELEASE GATE"
     print_rule
 
     require_clean_tree
 
     run_gate \
-        "enclave package verification" \
+        "gateflow package verification" \
         cargo package \
-            -p enclave
+            -p gateflow
 
     run_gate \
-        "enclave publish dry run" \
+        "gateflow publish dry run" \
         cargo publish \
             --dry-run \
-            -p enclave
+            -p gateflow
 }
 
 run_macros_release() {
@@ -256,21 +256,21 @@ run_macros_release() {
 
     echo
     print_rule
-    echo " ENCLAVE-MACROS RELEASE GATE"
+    echo " GATEFLOW-MACROS RELEASE GATE"
     print_rule
 
     require_clean_tree
 
     run_gate \
-        "enclave-macros package verification" \
+        "gateflow-macros package verification" \
         cargo package \
-            -p enclave-macros
+            -p gateflow-macros
 
     run_gate \
-        "enclave-macros publish dry run" \
+        "gateflow-macros publish dry run" \
         cargo publish \
             --dry-run \
-            -p enclave-macros
+            -p gateflow-macros
 }
 
 require_command cargo
@@ -280,7 +280,7 @@ require_repo_root
 
 echo
 print_rule
-echo " ENCLAVE RELEASE GATES"
+echo " GATEFLOW RELEASE GATES"
 print_rule
 echo
 echo "Mode       : $mode"
@@ -320,6 +320,6 @@ esac
 
 echo
 print_rule
-echo " ALL REQUESTED ENCLAVE GATES GREEN"
+echo " ALL REQUESTED GATEFLOW GATES GREEN"
 print_rule
 echo

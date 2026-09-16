@@ -1,20 +1,21 @@
-//! `enclave` isolates test code inside a real, unprivileged Linux network
+//! `gateflow` isolates test code inside a real, unprivileged Linux network
 //! namespace — not a simulated one.
 //!
 //! Crates like [`turmoil`](https://docs.rs/turmoil) and
 //! [`madsim`](https://docs.rs/madsim) get you fast, deterministic tests by
-//! *simulating* the network in userspace. `enclave` takes the opposite
+//! *simulating* the network in userspace. `gateflow` takes the opposite
 //! trade: real kernel network namespaces, real sockets, real `tc netem`
 //! chaos — slower, but nothing is faked. If a test passes here, it passed
 //! against the same networking stack production runs on.
 //!
 //! # Status
 //!
-//! Early and incomplete. Right now [`netns`] provides the one working
-//! primitive: creating an unprivileged network namespace. Interface wiring
-//! (veth pairs), resource limits (cgroups v2), traffic-shaping chaos
-//! (`tc netem`), and a `#[test]`-style attribute macro (see the
-//! `enclave-macros` companion crate) are not built yet.
+//! Early and incomplete. [`netns`] provides the working primitive:
+//! creating an unprivileged network namespace, and the `#[gateflow::isolated_net]`
+//! attribute macro (`macros` feature, see the `gateflow-macros` companion
+//! crate) wraps a test to run inside one. Interface wiring (veth pairs),
+//! resource limits (cgroups v2), and traffic-shaping chaos (`tc netem`)
+//! are not built yet.
 //!
 //! # Platform
 //!
@@ -25,7 +26,7 @@
 
 #[cfg(not(target_os = "linux"))]
 compile_error!(
-    "enclave only supports Linux (namespace isolation is a Linux-specific kernel feature)"
+    "gateflow only supports Linux (namespace isolation is a Linux-specific kernel feature)"
 );
 
 pub mod error;
@@ -35,7 +36,7 @@ pub use error::Error;
 
 /// Wraps a test function so its body runs inside a freshly created,
 /// unprivileged network namespace instead of the host's. Requires the
-/// `macros` feature. See [`enclave_macros::isolated_net`] for the full
+/// `macros` feature. See [`gateflow_macros::isolated_net`] for the full
 /// docs.
 #[cfg(feature = "macros")]
-pub use enclave_macros::isolated_net;
+pub use gateflow_macros::isolated_net;

@@ -1,13 +1,13 @@
 [package]
-name = "enclave-macros"
+name = "gateflow-macros"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.85"
-description = "Procedural test-attribute macro for enclave sandboxed tests."
+description = "Procedural test-attribute macro for gateflow sandboxed tests."
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/darkstardevx/enclave"
-homepage = "https://github.com/darkstardevx/enclave"
-documentation = "https://docs.rs/enclave-macros"
+repository = "https://github.com/darkstardevx/gateflow"
+homepage = "https://github.com/darkstardevx/gateflow"
+documentation = "https://docs.rs/gateflow-macros"
 readme = "README.md"
 keywords = ["sandbox", "testing", "proc-macro"]
 categories = ["development-tools::procedural-macro-helpers"]

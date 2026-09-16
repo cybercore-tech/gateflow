@@ -1,6 +1,6 @@
 //! Unprivileged Linux user + network namespace creation.
 //!
-//! This is the one real, working primitive `enclave` has today: put the
+//! This is the one real, working primitive `gateflow` has today: put the
 //! calling process into a fresh network namespace it can configure freely,
 //! without needing real root on the host. It's the same trick rootless
 //! Podman and `slirp4netns` use — pair `CLONE_NEWUSER` with `CLONE_NEWNET`

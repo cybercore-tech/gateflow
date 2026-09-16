@@ -1,17 +1,17 @@
-# enclave
+# gateflow
 
-[![CI](https://github.com/darkstardevx/enclave/actions/workflows/ci.yml/badge.svg)](https://github.com/darkstardevx/enclave/actions/workflows/ci.yml)
+[![CI](https://github.com/darkstardevx/gateflow/actions/workflows/ci.yml/badge.svg)](https://github.com/darkstardevx/gateflow/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
 
-**enclave isolates test code inside a real, unprivileged Linux network namespace — not a simulated one.**
+**gateflow isolates test code inside a real, unprivileged Linux network namespace — not a simulated one.**
 
-Crates like [`turmoil`](https://docs.rs/turmoil) and [`madsim`](https://docs.rs/madsim) get you fast, deterministic network tests by *simulating* the network in userspace. `enclave` takes the opposite trade: real kernel network namespaces, real sockets, real `tc netem` chaos — slower, but nothing is faked. If a test passes here, it passed against the same networking stack production actually runs on.
+Crates like [`turmoil`](https://docs.rs/turmoil) and [`madsim`](https://docs.rs/madsim) get you fast, deterministic network tests by *simulating* the network in userspace. `gateflow` takes the opposite trade: real kernel network namespaces, real sockets, real `tc netem` chaos — slower, but nothing is faked. If a test passes here, it passed against the same networking stack production actually runs on.
 
 > ⚠️ **Early and incomplete.** Namespace creation works and is tested. Interface wiring (veth pairs), resource limits (cgroups v2), and traffic-shaping chaos (`tc netem`) are not built yet — see [Roadmap](#roadmap). Treat this as a learning project in progress, not a released tool.
 
 ## Why not just simulate it?
 
-Because a simulation is a model of the kernel's behavior, and models can be wrong in ways that only show up in production. `enclave`'s bet is that for network-adjacent code where *stability matters more than test speed*, running against the real kernel networking stack — inside real isolation so tests don't interfere with each other or the host — is worth being slower.
+Because a simulation is a model of the kernel's behavior, and models can be wrong in ways that only show up in production. `gateflow`'s bet is that for network-adjacent code where *stability matters more than test speed*, running against the real kernel networking stack — inside real isolation so tests don't interfere with each other or the host — is worth being slower.
 
 ## Platform
 
@@ -19,30 +19,30 @@ Linux only. Namespace isolation is a Linux kernel feature with no portable equiv
 
 ## Installation
 
-Not published yet (and `enclave` is already taken on crates.io by an unrelated, dormant SGX-related crate — the published name will need to differ; see [Roadmap](#roadmap)). For now, depend on it by path or git:
+Not published yet (and `gateflow` is already taken on crates.io by an unrelated, dormant SGX-related crate — the published name will need to differ; see [Roadmap](#roadmap)). For now, depend on it by path or git:
 
 ```toml
 [dependencies]
-enclave = { git = "https://github.com/darkstardevx/enclave", features = ["macros"] }
+gateflow = { git = "https://github.com/darkstardevx/gateflow", features = ["macros"] }
 ```
 
 ## Quick Start
 
 ```rust,ignore
-#[enclave::isolated_net]
+#[gateflow::isolated_net]
 fn sees_its_own_namespace() {
     // Runs as uid 0 inside a network namespace nothing else on the host
     // can see — no host root required to get here.
 }
 ```
 
-Under the hood, `#[enclave::isolated_net]` expands to a `#[test]` that forks the process and, in the child — which `unshare(2)` requires to be single-threaded, which a normal `cargo test` binary is not — enters a fresh user + network namespace before running your test body. See [`enclave::netns`](src/netns.rs) for the primitive directly, if you want to drive it yourself instead of through the macro.
+Under the hood, `#[gateflow::isolated_net]` expands to a `#[test]` that forks the process and, in the child — which `unshare(2)` requires to be single-threaded, which a normal `cargo test` binary is not — enters a fresh user + network namespace before running your test body. See [`gateflow::netns`](src/netns.rs) for the primitive directly, if you want to drive it yourself instead of through the macro.
 
 ## Architecture
 
 ```text
 ┌─────────────────────────┐
-│  #[enclave::isolated_net]│   proc-macro (crates/enclave-macros)
+│  #[gateflow::isolated_net]│   proc-macro (crates/gateflow-macros)
 └────────────┬─────────────┘
              │ expands to
              ▼
@@ -64,7 +64,7 @@ Under the hood, `#[enclave::isolated_net]` expands to a `#[test]` that forks the
 Deliberately narrow right now, on purpose — the predecessor design this grew out of tried to build routing, congestion control, telemetry, and chaos injection all before anything compiled. Not repeating that:
 
 - [x] Unprivileged user + network namespace creation (`src/netns.rs`)
-- [x] `#[enclave::isolated_net]` test-attribute macro
+- [x] `#[gateflow::isolated_net]` test-attribute macro
 - [ ] veth pair wiring via netlink (no shelling out to `ip`)
 - [ ] cgroups v2 resource limits per test
 - [ ] Real chaos via `tc qdisc netem` (loss / latency / reordering)

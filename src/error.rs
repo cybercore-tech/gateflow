@@ -1,4 +1,4 @@
-//! Error types returned by `enclave`.
+//! Error types returned by `gateflow`.
 
 use std::fmt;
 
