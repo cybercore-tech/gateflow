@@ -10,12 +10,14 @@
 //!
 //! # Status
 //!
-//! Early and incomplete. [`netns`] provides the working primitive:
-//! creating an unprivileged network namespace, and the `#[gateflow::isolated_net]`
-//! attribute macro (`macros` feature, see the `gateflow-macros` companion
-//! crate) wraps a test to run inside one. Interface wiring (veth pairs),
-//! resource limits (cgroups v2), and traffic-shaping chaos (`tc netem`)
-//! are not built yet.
+//! Early and incomplete. [`netns`] provides the working primitives:
+//! creating an unprivileged network namespace with a working (brought-up)
+//! loopback interface, and [`chaos`] for applying real `tc netem`
+//! delay/loss/jitter/reordering to that loopback. The
+//! `#[gateflow::isolated_net]` attribute macro (`macros` feature, see the
+//! `gateflow-macros` companion crate) wraps a test to run inside a plain
+//! (non-chaos) namespace. Interface wiring (veth pairs) and resource
+//! limits (cgroups v2) are not built yet.
 //!
 //! # Platform
 //!
@@ -29,6 +31,7 @@ compile_error!(
     "gateflow only supports Linux (namespace isolation is a Linux-specific kernel feature)"
 );
 
+pub mod chaos;
 pub mod error;
 pub mod netns;
 

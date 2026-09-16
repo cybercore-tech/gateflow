@@ -131,7 +131,7 @@ CI (`.github/workflows/ci.yml`) runs the equivalent checks on every push, includ
 <details>
 <summary><strong>MSRV check</strong> — pinned toolchain, full gate re-run</summary>
 
-**What it does:** Re-runs check/test/doctest/strict-rustdoc on the exact Rust version declared as `rust-version` in `Cargo.toml` (currently 1.85.0), not just whatever's installed locally.
+**What it does:** Re-runs check/test/doctest/strict-rustdoc on the exact Rust version declared as `rust-version` in `Cargo.toml` (currently 1.88.0), not just whatever's installed locally.
 
 **What a failure usually means:** Code using a language/std feature newer than the declared MSRV, or a dependency whose *default* version resolution picked something incompatible (see the MSRV-pin comments already in `Cargo.toml` for examples of this from the sibling `diagprint` project).
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 mode="${1:-full}"
-msrv="1.85.0"
+msrv="1.88.0"
 
 packages=(
     gateflow

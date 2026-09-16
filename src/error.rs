@@ -27,6 +27,14 @@ pub enum Error {
         /// The underlying I/O error.
         source: std::io::Error,
     },
+
+    /// Building the internal Tokio runtime used for the one-shot netlink
+    /// setup (bringing `lo` up, applying chaos) failed.
+    Runtime(std::io::Error),
+
+    /// A netlink operation (bringing an interface up, applying `tc netem`)
+    /// failed.
+    Netlink(nlink::Error),
 }
 
 impl fmt::Display for Error {
@@ -39,6 +47,8 @@ impl fmt::Display for Error {
                 write!(f, "child did not exit normally: {status:?}")
             }
             Error::IdMap { path, source } => write!(f, "failed writing {path}: {source}"),
+            Error::Runtime(err) => write!(f, "failed to build the netlink setup runtime: {err}"),
+            Error::Netlink(err) => write!(f, "netlink operation failed: {err}"),
         }
     }
 }
@@ -48,6 +58,8 @@ impl std::error::Error for Error {
         match self {
             Error::Namespace(err) | Error::Fork(err) | Error::Wait(err) => Some(err),
             Error::IdMap { source, .. } => Some(source),
+            Error::Runtime(source) => Some(source),
+            Error::Netlink(err) => Some(err),
             Error::ChildTerminated(_) => None,
         }
     }

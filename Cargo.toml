@@ -2,7 +2,7 @@
 name = "gateflow"
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.88"
 description = "Real per-test kernel sandboxing for Rust: isolated network namespaces, not simulated ones."
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/darkstardevx/gateflow"
@@ -22,6 +22,14 @@ macros = ["dep:gateflow-macros"]
 
 [dependencies]
 nix = { version = "0.31.3", features = ["sched", "user", "process", "fs", "mount"] }
+# rust-version above is 1.88, not diagprint's 1.85, because of this:
+# nlink 0.15.1 declares rust-version = "1.85" but its source actually uses
+# let-chains (stable only since 1.88, edition 2024) and
+# `<uN>::is_multiple_of` (stable since ~1.88 too) — confirmed by actually
+# building against a real 1.88.0 toolchain, not by trusting the declared
+# field. Revisit if a newer nlink release corrects its own MSRV claim.
+nlink = "0.15.1"
+tokio = { version = "1.53.1", features = ["rt-multi-thread"] }
 
 [dependencies.gateflow-macros]
 version = "0.1.0"

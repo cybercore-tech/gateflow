@@ -25,6 +25,8 @@ use std::fs;
 use nix::sched::{CloneFlags, unshare};
 use nix::sys::wait::{WaitStatus, waitpid};
 use nix::unistd::{ForkResult, fork, getgid, getuid};
+use nlink::netlink::tc::NetemConfig;
+use nlink::{Connection, Route};
 
 use crate::Error;
 
@@ -34,8 +36,10 @@ use crate::Error;
 /// On success, the calling process is mapped to uid 0 / gid 0 inside the
 /// new namespace (and only inside it — this grants no privilege on the
 /// host) and owns a network namespace containing nothing but a loopback
-/// interface. Wiring it to anything (a veth pair, routes, `tc netem`
-/// rules) is not implemented yet.
+/// interface — **down**, like every fresh network namespace's `lo`; this
+/// function does not bring it up (it has no async runtime to do that
+/// with). [`fork_and_enter`] does. Wiring the namespace to anything else
+/// (a veth pair, routes) is not implemented yet.
 ///
 /// # Errors
 ///
@@ -71,15 +75,19 @@ fn write_proc_self(path: &'static str, contents: &str) -> Result<(), Error> {
 
 /// Forks the current process and enters an unprivileged net namespace in
 /// the child, immediately after `fork(2)` — see the [module docs](self)
-/// for why the fork is necessary at all.
+/// for why the fork is necessary at all. Unlike calling
+/// [`enter_unprivileged_net_namespace`] directly, this also brings the
+/// new namespace's `lo` up, so ordinary loopback sockets work in
+/// `child_fn` without extra setup.
 ///
 /// `child_fn` runs inside the new namespace and its return value becomes
 /// the child process's exit code. The parent blocks in `waitpid(2)` and
 /// returns that exit code once the child terminates.
 ///
-/// If entering the namespace itself fails, the child exits with status
-/// `111` (a value unlikely to collide with `child_fn`'s own exit codes)
-/// without ever running `child_fn`.
+/// If entering the namespace fails, the child exits with status `111`;
+/// if bringing `lo` up fails, `112` — both without ever running
+/// `child_fn` (values unlikely to collide with `child_fn`'s own exit
+/// codes).
 ///
 /// # Errors
 ///
@@ -90,9 +98,46 @@ pub fn fork_and_enter<F>(child_fn: F) -> Result<i32, Error>
 where
     F: FnOnce() -> i32,
 {
-    // SAFETY: the child performs only async-signal-safe work (a handful of
-    // syscalls and one `fs::write` before ever branching into arbitrary
-    // caller code) before either calling `child_fn` or exiting directly.
+    fork_and_enter_inner(None, child_fn)
+}
+
+/// Identical to [`fork_and_enter`], but additionally applies `netem`
+/// (`tc qdisc ... netem`, real kernel delay/loss/jitter/reordering — see
+/// [`crate::chaos`]) to the sandboxed namespace's own `lo` before running
+/// `child_fn`. Because loopback traffic really does traverse `lo`'s
+/// egress qdisc on the way back to itself, this gives `child_fn` real,
+/// kernel-enforced chaos on ordinary `127.0.0.1` sockets.
+///
+/// If applying the netem configuration fails, the child exits with
+/// status `113` without ever running `child_fn`.
+///
+/// # Errors
+///
+/// Same as [`fork_and_enter`].
+pub fn fork_and_enter_with_chaos<F>(netem: NetemConfig, child_fn: F) -> Result<i32, Error>
+where
+    F: FnOnce() -> i32,
+{
+    fork_and_enter_inner(Some(netem), child_fn)
+}
+
+fn fork_and_enter_inner<F>(netem: Option<NetemConfig>, child_fn: F) -> Result<i32, Error>
+where
+    F: FnOnce() -> i32,
+{
+    // SAFETY: `fork(2)` itself is sound to call here regardless of what
+    // the child does next — no invariant of `fork` depends on it. What
+    // *isn't* covered by this comment (and is a real, accepted tradeoff
+    // of this design, not a guarantee) is strict POSIX async-signal-safety
+    // of the child's post-fork work: `enter_unprivileged_net_namespace`
+    // and `run_loopback_setup` allocate (`format!`, a Tokio runtime's own
+    // startup) before running `child_fn`, which is technically unsound if
+    // the parent was mid-malloc on another thread at the exact moment of
+    // fork. Accepted in practice for a `fork_and_enter` caller — a plain
+    // `#[test]` function not itself holding an allocator lock across the
+    // call — the same way most fork-then-more-than-exec code in the wild
+    // does; a stricter design would fork+exec a tiny helper binary
+    // instead, which is future work if this ever bites someone for real.
     match unsafe { fork() }.map_err(Error::Fork)? {
         ForkResult::Parent { child } => match waitpid(child, None).map_err(Error::Wait)? {
             WaitStatus::Exited(_, code) => Ok(code),
@@ -100,12 +145,35 @@ where
         },
         ForkResult::Child => {
             let code = match enter_unprivileged_net_namespace() {
-                Ok(()) => child_fn(),
+                Ok(()) => match run_loopback_setup(netem) {
+                    Ok(()) => child_fn(),
+                    Err(_) => 113,
+                },
                 Err(_) => 111,
             };
             std::process::exit(code);
         }
     }
+}
+
+/// Builds a one-shot Tokio runtime and brings `lo` up (applying `netem`
+/// too, if given) inside it. A fresh runtime per call, not a shared one,
+/// because this only ever runs once, immediately post-fork, in a child
+/// about to either run `child_fn` or exit — there's nothing to amortize.
+fn run_loopback_setup(netem: Option<NetemConfig>) -> Result<(), Error> {
+    let runtime = tokio::runtime::Runtime::new().map_err(Error::Runtime)?;
+    runtime.block_on(configure_loopback(netem))
+}
+
+async fn configure_loopback(netem: Option<NetemConfig>) -> Result<(), Error> {
+    let conn = Connection::<Route>::new().map_err(Error::Netlink)?;
+    conn.set_link_up("lo").await.map_err(Error::Netlink)?;
+    if let Some(netem) = netem {
+        conn.apply_netem("lo", netem)
+            .await
+            .map_err(Error::Netlink)?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -138,6 +206,100 @@ mod tests {
         assert_eq!(
             exit_code, 0,
             "child did not observe uid 0 in a distinct net namespace (exit code {exit_code})"
+        );
+    }
+
+    /// A fresh network namespace's `lo` starts down — proves
+    /// `fork_and_enter` actually brings it up, not just that the
+    /// namespace exists. A UDP send-to-self would fail (`ENETUNREACH` or
+    /// similar) if `lo` were still down.
+    #[test]
+    fn fork_and_enter_brings_loopback_up() {
+        use std::net::UdpSocket;
+
+        let exit_code = fork_and_enter(|| {
+            let socket = match UdpSocket::bind("127.0.0.1:0") {
+                Ok(s) => s,
+                Err(_) => return 2,
+            };
+            let addr = match socket.local_addr() {
+                Ok(a) => a,
+                Err(_) => return 3,
+            };
+            if socket.send_to(b"ping", addr).is_err() {
+                return 4;
+            }
+            let mut buf = [0u8; 4];
+            match socket.recv_from(&mut buf) {
+                Ok((n, _)) if &buf[..n] == b"ping" => 0,
+                _ => 5,
+            }
+        })
+        .expect("fork_and_enter should run to completion");
+
+        assert_eq!(
+            exit_code, 0,
+            "loopback UDP send-to-self failed inside the sandbox (exit code {exit_code}) \
+             — lo is probably still down"
+        );
+    }
+
+    /// Proves `fork_and_enter_with_chaos` applies a *real* kernel netem
+    /// qdisc, not a no-op: a UDP packet sent to self over loopback with a
+    /// configured 200ms delay should take measurably close to that long
+    /// to arrive, since netem's egress delay on `lo` really does apply to
+    /// loopback traffic on its way back to itself.
+    #[test]
+    fn fork_and_enter_with_chaos_applies_real_kernel_delay() {
+        use std::net::UdpSocket;
+        use std::time::{Duration, Instant};
+
+        use crate::chaos::NetemConfig;
+
+        let netem = NetemConfig::new().delay(Duration::from_millis(200)).build();
+
+        let exit_code = fork_and_enter_with_chaos(netem, || {
+            let socket = match UdpSocket::bind("127.0.0.1:0") {
+                Ok(s) => s,
+                Err(_) => return 2,
+            };
+            let addr = match socket.local_addr() {
+                Ok(a) => a,
+                Err(_) => return 3,
+            };
+            if socket
+                .set_read_timeout(Some(Duration::from_secs(5)))
+                .is_err()
+            {
+                return 4;
+            }
+
+            let start = Instant::now();
+            if socket.send_to(b"ping", addr).is_err() {
+                return 5;
+            }
+            let mut buf = [0u8; 4];
+            if socket.recv_from(&mut buf).is_err() {
+                return 6;
+            }
+            let elapsed = start.elapsed();
+
+            // Generous lower bound (well under the configured 200ms) to
+            // absorb scheduling jitter while still failing hard if netem
+            // wasn't really applied (an unaffected loopback round trip
+            // is sub-millisecond, not "close to 150ms").
+            if elapsed >= Duration::from_millis(150) {
+                0
+            } else {
+                eprintln!("gateflow test: observed delay {elapsed:?}, expected >= 150ms");
+                7
+            }
+        })
+        .expect("fork_and_enter_with_chaos should run to completion");
+
+        assert_eq!(
+            exit_code, 0,
+            "did not observe the expected netem-induced delay (exit code {exit_code})"
         );
     }
 }
