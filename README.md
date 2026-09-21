@@ -1,13 +1,15 @@
 # gateflow
 
 [![CI](https://github.com/darkstardevx/gateflow/actions/workflows/ci.yml/badge.svg)](https://github.com/darkstardevx/gateflow/actions/workflows/ci.yml)
+[![Project site](https://img.shields.io/badge/project%20site-GitHub%20Pages-8b7cff.svg)](https://darkstardevx.github.io/gateflow/)
+[![Crates.io](https://img.shields.io/crates/v/gateflow.svg)](https://crates.io/crates/gateflow)
 [![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
 
 **gateflow isolates test code inside a real, unprivileged Linux network namespace — not a simulated one.**
 
 Crates like [`turmoil`](https://docs.rs/turmoil) and [`madsim`](https://docs.rs/madsim) get you fast, deterministic network tests by *simulating* the network in userspace. `gateflow` takes the opposite trade: real kernel network namespaces, real sockets, real `tc netem` chaos — slower, but nothing is faked. If a test passes here, it passed against the same networking stack production actually runs on.
 
-> ⚠️ **Early and incomplete.** Namespace creation, real `tc netem` chaos on the sandbox's own loopback, real veth-pair connectivity *between* two sandboxed namespaces, opt-in cgroup v2 limits, and an opt-in seccomp-BPF defense-in-depth profile are implemented. The project is still not published and the hardening controls require an appropriately delegated host — see [Roadmap](#roadmap). Treat this as a learning project in progress, not a released tool.
+> **v0.1.0 is published.** Namespace creation, real `tc netem` chaos on the sandbox's own loopback, real veth-pair connectivity *between* two sandboxed namespaces, opt-in cgroup v2 limits, and an opt-in seccomp-BPF defense-in-depth profile are implemented. The hardening controls require an appropriately delegated host, and the remaining scope is tracked in the [Roadmap](#roadmap).
 
 ## Why not just simulate it?
 
@@ -27,21 +29,21 @@ sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
 
 ## Installation
 
-For the Rust library, depend on the current Git revision until the first crates.io release:
+For the Rust library:
 
 ```toml
 [dependencies]
-gateflow = { git = "https://github.com/darkstardevx/gateflow", features = ["macros"] }
+gateflow = { version = "0.1.0", features = ["macros"] }
 ```
 
-The companion diagnostic CLI can be installed from the repository while releases are still being prepared:
+The companion diagnostic CLI is also available from crates.io:
 
 ```sh
-cargo install --git https://github.com/darkstardevx/gateflow --bin gateflow
+cargo install gateflow --version 0.1.0
 gateflow doctor
 ```
 
-After a signed GitHub binary release is available, the pinned installer can be used on supported Linux hosts:
+For supported Linux hosts, the signed binary installer is pinned to the release tag:
 
 ```sh
 curl --proto '=https' --tlsv1.2 -fsSL \
@@ -211,7 +213,7 @@ Deliberately narrow right now, on purpose — the predecessor design this grew o
 - [x] Opt-in cgroups v2 memory/process/CPU limits per test (requires a delegated cgroup root)
 - [x] Opt-in seccomp-bpf defense-in-depth profile per sandboxed test
 - [x] Diagnostic CLI and signed Linux binary release workflow
-- [ ] Publish to crates.io (name confirmed available as `gateflow`/`gateflow-macros`, not yet registered)
+- [x] Publish `gateflow` and `gateflow-macros` 0.1.0 to crates.io
 
 ## License
 
