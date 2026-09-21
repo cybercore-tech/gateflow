@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="gateflow — real Linux network sandboxes for Rust tests. Real namespaces. Real sockets. Real chaos.">
+  <title>gateflow — test against the real kernel</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="noise" aria-hidden="true"></div>
+  <div class="ambient ambient-one" aria-hidden="true"></div>
+  <div class="ambient ambient-two" aria-hidden="true"></div>
+
+  <nav class="topbar">
+    <div class="container nav-inner">
+      <a class="wordmark" href="#top" aria-label="gateflow home">
+        <span class="mark" aria-hidden="true"><i></i><i></i><i></i></span>
+        <span>gateflow</span>
+      </a>
+      <div class="nav-links">
+        <a href="#why">Why gateflow</a>
+        <a href="#surface">Surface</a>
+        <a href="#install">Install</a>
+        <a class="nav-button" href="https://github.com/darkstardevx/gateflow" target="_blank" rel="noreferrer">GitHub <span>↗</span></a>
+      </div>
+      <button class="menu-button" type="button" aria-label="Toggle navigation" aria-expanded="false">☰</button>
+    </div>
+  </nav>
+
+  <main id="top">
+    <section class="hero section-pad">
+      <div class="container hero-grid">
+        <div class="hero-copy reveal">
+          <div class="eyebrow"><span class="pulse"></span> KERNEL-LEVEL TESTING / LINUX ONLY</div>
+          <h1>A test that crosses the gate has met the <em>real kernel.</em></h1>
+          <p class="hero-lede">gateflow puts Rust test code inside an unprivileged Linux network namespace — with real sockets, real veth links, and real <code>tc netem</code> chaos.</p>
+          <div class="hero-actions">
+            <a class="button button-primary" href="#install">Start with gateflow <span>↓</span></a>
+            <a class="button button-secondary" href="https://github.com/darkstardevx/gateflow" target="_blank" rel="noreferrer">Read the source <span>↗</span></a>
+          </div>
+          <div class="tag-row">
+            <span class="tag tag-lime">Rust 1.88+</span>
+            <span class="tag">Linux namespaces</span>
+            <span class="tag">MIT / Apache-2.0</span>
+            <span class="tag tag-violet">v0.1.0</span>
+          </div>
+        </div>
+
+        <div class="instrument reveal delay-one">
+          <div class="instrument-top">
+            <div class="instrument-title"><span class="corner-dot"></span> sandbox trace / run_0142</div>
+            <div class="instrument-state"><span class="state-dot"></span> PASSING</div>
+          </div>
+          <div class="instrument-body">
+            <div class="trace-line"><span class="trace-time">00.000</span><span class="trace-ok">✓</span><span>fork()</span><span class="trace-dim">child is single-threaded</span></div>
+            <div class="trace-line"><span class="trace-time">00.004</span><span class="trace-ok">✓</span><span>unshare</span><span class="trace-dim">user + network namespace</span></div>
+            <div class="trace-line"><span class="trace-time">00.006</span><span class="trace-ok">✓</span><span>uid_map</span><span class="trace-dim">uid 1000 → uid 0 inside</span></div>
+            <div class="trace-line"><span class="trace-time">00.011</span><span class="trace-ok">✓</span><span>lo / netem</span><span class="trace-dim">delay 100ms · loss 1%</span></div>
+            <div class="trace-line active"><span class="trace-time">00.013</span><span class="trace-live">›</span><span>test body</span><span class="trace-dim">real UDP round trip</span></div>
+            <div class="trace-line"><span class="trace-time">00.127</span><span class="trace-ok">✓</span><span>exit 0</span><span class="trace-dim">gate cleared</span></div>
+            <div class="trace-cursor" aria-hidden="true"></div>
+          </div>
+          <div class="instrument-foot"><span>namespace: 4026534217</span><span>isolation: active</span><span>host root: not required</span></div>
+        </div>
+      </div>
+      <div class="container hero-foot reveal delay-two">
+        <span>THE TEST BENCH FOR NETWORK-ADJACENT RUST</span>
+        <span class="hero-rule"></span>
+        <span>NO SIMULATION LAYER</span>
+      </div>
+    </section>
+
+    <section class="section-pad intro" id="why">
+      <div class="container split-heading reveal">
+        <div>
+          <div class="section-kicker">01 / THE PREMISE</div>
+          <h2>Models are useful.<br><em>Kernels are evidence.</em></h2>
+        </div>
+        <p>Simulation gets you speed. gateflow gets you closer to the conditions your service actually has to survive: Linux namespaces, kernel sockets, link state, routing, and packet impairment enforced below your application.</p>
+      </div>
+      <div class="container fact-grid reveal delay-one">
+        <article class="fact-card"><span class="fact-index">A1</span><strong>Nothing faked</strong><p>Real network namespaces and real UDP/TCP traffic — not a user-space model of them.</p></article>
+        <article class="fact-card"><span class="fact-index">A2</span><strong>Isolation first</strong><p>Each sandbox gets its own network view, so tests can exercise failure without touching the host.</p></article>
+        <article class="fact-card"><span class="fact-index">A3</span><strong>Chaos at the link</strong><p>Delay, jitter, loss, reordering, corruption, and duplication through kernel <code>netem</code>.</p></article>
+      </div>
+    </section>
+
+    <section class="section-pad surface" id="surface">
+      <div class="container section-heading reveal">
+        <div><div class="section-kicker">02 / THE SURFACE</div><h2>One API. Three<br><em>controlled worlds.</em></h2></div>
+        <p>Start with a single isolated loopback. Add real chaos when timing matters. Move to a paired veth topology when two endpoints need to talk.</p>
+      </div>
+      <div class="container mode-shell reveal delay-one">
+        <div class="mode-tabs" role="tablist" aria-label="Sandbox modes">
+          <button class="mode-tab active" type="button" data-mode="single" role="tab" aria-selected="true">01 / SINGLE</button>
+          <button class="mode-tab" type="button" data-mode="chaos" role="tab" aria-selected="false">02 / CHAOS</button>
+          <button class="mode-tab" type="button" data-mode="paired" role="tab" aria-selected="false">03 / PAIRED</button>
+        </div>
+        <div class="mode-content">
+          <div class="mode-copy">
+            <div class="mode-number">MODE <span id="mode-number">01</span></div>
+            <h3 id="mode-title">Fresh network namespace</h3>
+            <p id="mode-description">A clean Linux network view with loopback brought up automatically. Perfect for testing bind behavior, local protocols, and isolation assumptions.</p>
+            <div class="mode-code"><span class="code-purple">Sandbox</span><span>::new()</span><span class="code-muted">.enter(|| {</span><br><span class="code-indent">your_test_body()</span><br><span class="code-muted">})</span></div>
+          </div>
+          <div class="topology" id="topology-single" aria-label="Single sandbox topology">
+            <div class="topo-host">HOST PROCESS</div>
+            <div class="topo-arrow">fork ↘</div>
+            <div class="topo-box topo-box-main"><span class="topo-label">USER + NET NS</span><strong>test body</strong><small>lo · 127.0.0.1</small></div>
+            <div class="topo-badge">host root not required</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section-pad architecture">
+      <div class="container architecture-grid reveal">
+        <div class="architecture-copy">
+          <div class="section-kicker">03 / TOPOLOGY</div>
+          <h2>When one namespace<br>isn't enough.</h2>
+          <p><code>Sandbox::paired()</code> builds a second namespace owned by the same user namespace, then wires both ends with a real veth pair. No host bridge. No fixed sleep. A handshake confirms both links are up before either closure runs.</p>
+          <div class="stat-line"><span><b>2</b> namespaces</span><span><b>1</b> veth pair</span><span><b>0</b> host CAP_NET_ADMIN</span></div>
+        </div>
+        <div class="network-panel">
+          <div class="network-top"><span><span class="corner-dot"></span> pair / link-01</span><span class="network-live">LINK UP</span></div>
+          <div class="network-body">
+            <div class="network-node node-a"><span class="node-socket"></span><b>namespace A</b><small>10.200.100.1</small></div>
+            <div class="network-wire"><span class="wire-packet p1"></span><span class="wire-packet p2"></span><span class="wire-label">veth-a ⇄ veth-b</span></div>
+            <div class="network-node node-b"><span class="node-socket"></span><b>namespace B</b><small>10.200.100.2</small></div>
+          </div>
+          <div class="network-bottom"><span>UDP ROUND TRIP</span><strong>0.42 ms</strong><span class="green-text">CONFIRMED</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section-pad hardening">
+      <div class="container section-heading reveal">
+        <div><div class="section-kicker">04 / DEFENSE IN DEPTH</div><h2>Resource limits.<br><em>Syscall boundaries.</em></h2></div>
+        <p>Hardening is explicit. Add cgroup v2 memory, process, and CPU limits, then install a seccomp-BPF profile after network setup and before the test body runs.</p>
+      </div>
+      <div class="container hardening-grid reveal delay-one">
+        <div class="hardening-card"><div class="card-icon">⌗</div><div><h3>cgroup v2</h3><p>Memory ceilings, process-count limits, and CPU quotas under a delegated hierarchy.</p><span class="card-status">OPT-IN / DELEGATED ROOT</span></div></div>
+        <div class="hardening-card"><div class="card-icon violet-icon">◇</div><div><h3>seccomp-BPF</h3><p>Blocks namespace changes, mount operations, ptrace, BPF, reboot, and namespace-bearing clone calls.</p><span class="card-status violet-status">OPT-IN / DEFENSE IN DEPTH</span></div></div>
+      </div>
+    </section>
+
+    <section class="section-pad install-section" id="install">
+      <div class="container install-grid reveal">
+        <div class="install-copy"><div class="section-kicker">05 / FIRST RUN</div><h2>Put a gate<br>in your tests.</h2><p>Not published on crates.io yet. Pull the current line from GitHub, enable the macro, and start with a real namespace.</p><a class="text-link" href="https://github.com/darkstardevx/gateflow#quick-start" target="_blank" rel="noreferrer">Read the quick start ↗</a></div>
+        <div class="install-panel">
+          <div class="install-panel-head"><span><span class="corner-dot"></span> terminal / cargo</span><button class="copy-button" type="button" aria-label="Copy install command">COPY</button></div>
+          <div class="install-command"><span class="prompt">$</span><code id="install-command">cargo add gateflow --git https://github.com/darkstardevx/gateflow --features macros</code></div>
+          <div class="install-snippet"><span class="snippet-comment">// chaos is a parameter, not a rewrite</span><br><span class="snippet-attr">#[gateflow::isolated_net</span><span class="snippet-value">(delay_ms = 100, loss_percent = 1.0)</span><span class="snippet-attr">]</span><br><span class="snippet-keyword">fn</span> <span class="snippet-fn">handles_a_bad_link</span>() {<br><span class="snippet-indent">assert!(service_survives());</span><br>}</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="container final-strip reveal">
+      <span class="final-mark" aria-hidden="true">╲╱</span><p>THE TEST PASSED THE MODEL.<br><strong>NOW RUN IT AGAINST THE KERNEL.</strong></p><a class="button button-primary" href="https://github.com/darkstardevx/gateflow" target="_blank" rel="noreferrer">Open repository ↗</a>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="container footer-inner"><div class="footer-brand"><span class="mark small"><i></i><i></i><i></i></span><span>gateflow</span><small>real per-test kernel sandboxing</small></div><div class="footer-links"><a href="https://github.com/darkstardevx/gateflow" target="_blank" rel="noreferrer">GitHub</a><a href="https://github.com/darkstardevx/gateflow/blob/main/README.md" target="_blank" rel="noreferrer">README</a><a href="https://github.com/darkstardevx/gateflow/blob/main/LICENSE-MIT" target="_blank" rel="noreferrer">License</a></div><span class="footer-note">LINUX / RUST / REAL KERNEL</span></div>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>

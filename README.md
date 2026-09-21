@@ -27,12 +27,28 @@ sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
 
 ## Installation
 
-Not published yet. For now, depend on it by path or git:
+For the Rust library, depend on the current Git revision until the first crates.io release:
 
 ```toml
 [dependencies]
 gateflow = { git = "https://github.com/darkstardevx/gateflow", features = ["macros"] }
 ```
+
+The companion diagnostic CLI can be installed from the repository while releases are still being prepared:
+
+```sh
+cargo install --git https://github.com/darkstardevx/gateflow --bin gateflow
+gateflow doctor
+```
+
+After a signed GitHub binary release is available, the pinned installer can be used on supported Linux hosts:
+
+```sh
+curl --proto '=https' --tlsv1.2 -fsSL \
+  https://github.com/darkstardevx/gateflow/raw/v0.1.0/scripts/install.sh | sh
+```
+
+The installer requires `cosign`, `curl`, `tar`, and `sha256sum`; it verifies the Sigstore-signed checksum manifest and then verifies the selected binary before installing it to `~/.local/bin`. Set `GATEFLOW_VERSION` to install another tagged release or `GATEFLOW_INSTALL_DIR` to choose a different destination.
 
 ## Quick Start
 
@@ -194,6 +210,7 @@ Deliberately narrow right now, on purpose — the predecessor design this grew o
 - [ ] `tc netem` on the veth link itself, not just loopback — now that real inter-sandbox connectivity exists
 - [x] Opt-in cgroups v2 memory/process/CPU limits per test (requires a delegated cgroup root)
 - [x] Opt-in seccomp-bpf defense-in-depth profile per sandboxed test
+- [x] Diagnostic CLI and signed Linux binary release workflow
 - [ ] Publish to crates.io (name confirmed available as `gateflow`/`gateflow-macros`, not yet registered)
 
 ## License

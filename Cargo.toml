@@ -9,6 +9,7 @@ repository = "https://github.com/darkstardevx/gateflow"
 homepage = "https://github.com/darkstardevx/gateflow"
 documentation = "https://docs.rs/gateflow"
 readme = "README.md"
+exclude = [".github/", "site/"]
 keywords = ["sandbox", "testing", "namespaces", "linux", "networking"]
 categories = ["development-tools::testing", "os::linux-apis"]
 
