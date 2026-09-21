@@ -124,9 +124,9 @@ pub fn enter_sibling_net_namespace() -> Result<(), Error> {
 /// returns that exit code once the child terminates.
 ///
 /// If entering the namespace fails, the child exits with status `111`;
-/// if bringing `lo` up fails, `112` — both without ever running
-/// `child_fn` (values unlikely to collide with `child_fn`'s own exit
-/// codes).
+/// if configuring the namespace's loopback (including optional chaos)
+/// fails, `113` — both without ever running `child_fn` (values unlikely
+/// to collide with `child_fn`'s own exit codes).
 ///
 /// # Errors
 ///

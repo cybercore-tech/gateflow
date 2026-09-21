@@ -85,6 +85,21 @@ jobs:
             exit 1;
           }
 
+      # Namespace creation alone is not enough for gateflow: the sandbox
+      # must also be able to administer links through netlink. This catches
+      # containers that permit CLONE_NEWUSER/CLONE_NEWNET but remove the
+      # effective CAP_NET_ADMIN needed to bring loopback up and configure
+      # veth/netem state.
+      - name: Verify namespace netlink capability
+        run: |
+          unshare --user --net --map-root-user sh -c '
+            ip link show lo >/dev/null &&
+            ip link set lo up
+          ' || {
+            echo "::error::the runner cannot administer network links through netlink inside an unprivileged namespace";
+            exit 1;
+          }
+
       - name: Check default features
         run: >
           cargo check
