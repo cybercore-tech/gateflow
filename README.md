@@ -15,6 +15,16 @@ Crates like [`turmoil`](https://docs.rs/turmoil) and [`madsim`](https://docs.rs/
 
 > ⚠️ **Early development.** gateflow is new and may still break or behave unexpectedly across kernels, distributions, CI runners, and delegated cgroup setups. Please [file an issue](https://github.com/darkstardevx/gateflow/issues) with your reproduction details, or join [#dev-tools on Discord](https://discord.com/channels/1525500888905420920/1550694349556416604) to compare notes with the project community.
 
+## Community
+
+The shared [#dev-tools channel](https://discord.com/channels/1525500888905420920/1550694349556416604) is where the Cybercore toolchain is built and discussed:
+
+- `cybercore` — the shared design system every tool above is built on
+- `cyberdeck` — systems intelligence framework
+- `diagprint` — Rust diagnostics lifecycle framework
+- `gateflow` — kernel-sandbox testing with netns, chaos, and veth
+- `cybermeta` — TUI EXIF metadata tool
+
 ## Why not just simulate it?
 
 Because a simulation is a model of the kernel's behavior, and models can be wrong in ways that only show up in production. `gateflow`'s bet is that for network-adjacent code where *stability matters more than test speed*, running against the real kernel networking stack — inside real isolation so tests don't interfere with each other or the host — is worth being slower.
