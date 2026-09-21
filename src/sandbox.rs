@@ -11,12 +11,19 @@
 //!
 //! ```rust,ignore
 //! use gateflow::Sandbox;
+//! use gateflow::{CgroupLimits, SeccompProfile};
 //!
 //! // Equivalent to netns::fork_and_enter(f)
 //! Sandbox::new().enter(|| 0)?;
 //!
 //! // Equivalent to netns::fork_and_enter_with_chaos(netem, f)
 //! Sandbox::new().chaos(netem).enter(|| 0)?;
+//!
+//! // Optional resource and syscall hardening.
+//! Sandbox::new()
+//!     .cgroup_limits(CgroupLimits::new().memory_max(256 * 1024 * 1024))
+//!     .seccomp(SeccompProfile::deny_namespace_changes())
+//!     .enter(|| 0)?;
 //!
 //! // Equivalent to veth::fork_veth_pair(a_fn, b_fn)
 //! Sandbox::paired().enter(|end| 0, |end| 0)?;
@@ -32,19 +39,26 @@
 use nlink::netlink::tc::NetemConfig;
 
 use crate::Error;
-use crate::netns::{fork_and_enter, fork_and_enter_with_chaos};
+use crate::hardening::{CgroupLimits, SeccompProfile};
+use crate::netns::{fork_and_enter, fork_and_enter_with_chaos, fork_and_enter_with_options};
 use crate::veth::{VethEnd, fork_veth_pair};
 
 /// Builds a single sandboxed namespace. See the [module docs](self).
 #[derive(Debug, Default)]
 pub struct Sandbox {
     netem: Option<NetemConfig>,
+    cgroup: Option<CgroupLimits>,
+    seccomp: Option<SeccompProfile>,
 }
 
 impl Sandbox {
     /// Starts building a single (non-paired) sandbox.
     pub fn new() -> Self {
-        Self { netem: None }
+        Self {
+            netem: None,
+            cgroup: None,
+            seccomp: None,
+        }
     }
 
     /// Starts building a paired sandbox instead — see [`PairedSandbox`].
@@ -61,11 +75,33 @@ impl Sandbox {
         self
     }
 
+    /// Applies cgroup v2 resource limits to the sandbox child.
+    ///
+    /// The caller must have a delegated cgroup v2 root; use
+    /// [`CgroupLimits::root`] when `/sys/fs/cgroup` is not writable by the
+    /// current user.
+    #[must_use]
+    pub fn cgroup_limits(mut self, limits: CgroupLimits) -> Self {
+        self.cgroup = Some(limits);
+        self
+    }
+
+    /// Installs an opt-in seccomp-BPF defense-in-depth profile after network
+    /// setup and before the test body runs.
+    #[must_use]
+    pub fn seccomp(mut self, profile: SeccompProfile) -> Self {
+        self.seccomp = Some(profile);
+        self
+    }
+
     /// Forks, enters the sandbox (with chaos applied first, if
     /// configured), and runs `f`. See [`crate::netns::fork_and_enter`] /
     /// [`crate::netns::fork_and_enter_with_chaos`] for the exact
     /// mechanism and sentinel exit codes — this delegates to one or the
-    /// other depending on whether [`Sandbox::chaos`] was called.
+    /// other depending on whether [`Sandbox::chaos`] was called. A child
+    /// that cannot be admitted to its cgroup or install seccomp exits with
+    /// sentinel code `114`; cgroup creation/configuration errors are returned
+    /// directly before forking.
     ///
     /// # Errors
     ///
@@ -74,9 +110,13 @@ impl Sandbox {
     where
         F: FnOnce() -> i32,
     {
-        match self.netem {
-            None => fork_and_enter(f),
-            Some(netem) => fork_and_enter_with_chaos(netem, f),
+        let has_cgroup = self.cgroup.is_some();
+        let cgroup = self.cgroup.map(CgroupLimits::create).transpose()?;
+
+        match (self.netem, has_cgroup, self.seccomp) {
+            (None, false, None) => fork_and_enter(f),
+            (Some(netem), false, None) => fork_and_enter_with_chaos(netem, f),
+            (netem, _, seccomp) => fork_and_enter_with_options(netem, seccomp, cgroup.as_ref(), f),
         }
     }
 }
@@ -182,6 +222,26 @@ mod tests {
         assert_eq!(
             exit_code, 0,
             "did not observe the expected chaos delay (code {exit_code})"
+        );
+    }
+
+    /// Confirms the opt-in seccomp profile blocks a namespace change after
+    /// setup while leaving the test process alive to report the result.
+    #[test]
+    fn sandbox_seccomp_blocks_namespace_changes() {
+        use nix::sched::{CloneFlags, unshare};
+
+        let exit_code = Sandbox::new()
+            .seccomp(SeccompProfile::deny_namespace_changes())
+            .enter(|| match unshare(CloneFlags::CLONE_NEWUTS) {
+                Err(nix::Error::EPERM) => 0,
+                _ => 1,
+            })
+            .expect("Sandbox::new().seccomp(..).enter should run to completion");
+
+        assert_eq!(
+            exit_code, 0,
+            "seccomp profile did not deny CLONE_NEWUTS (code {exit_code})"
         );
     }
 

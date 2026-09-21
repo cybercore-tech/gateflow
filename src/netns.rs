@@ -38,15 +38,16 @@
 // to the loopback chaos primitive.
 //-END
 
-use std::fs;
+use std::{fs, io};
 
 use nix::sched::{CloneFlags, unshare};
 use nix::sys::wait::{WaitStatus, waitpid};
-use nix::unistd::{ForkResult, fork, getgid, getuid};
+use nix::unistd::{ForkResult, fork, getgid, getuid, pipe, read, write};
 use nlink::netlink::tc::NetemConfig;
 use nlink::{Connection, Route};
 
 use crate::Error;
+use crate::hardening::{CgroupGuard, SeccompProfile, install_seccomp};
 
 /// Puts the *current* process into a fresh, unprivileged user + network
 /// namespace.
@@ -137,7 +138,7 @@ pub fn fork_and_enter<F>(child_fn: F) -> Result<i32, Error>
 where
     F: FnOnce() -> i32,
 {
-    fork_and_enter_inner(None, child_fn)
+    fork_and_enter_inner(None, None, None, child_fn)
 }
 
 /// Identical to [`fork_and_enter`], but additionally applies `netem`
@@ -157,13 +158,34 @@ pub fn fork_and_enter_with_chaos<F>(netem: NetemConfig, child_fn: F) -> Result<i
 where
     F: FnOnce() -> i32,
 {
-    fork_and_enter_inner(Some(netem), child_fn)
+    fork_and_enter_inner(Some(netem), None, None, child_fn)
 }
 
-fn fork_and_enter_inner<F>(netem: Option<NetemConfig>, child_fn: F) -> Result<i32, Error>
+/// Internal entry point used by [`crate::Sandbox`] when optional hardening
+/// policies are configured.
+pub(crate) fn fork_and_enter_with_options<F>(
+    netem: Option<NetemConfig>,
+    seccomp: Option<SeccompProfile>,
+    cgroup: Option<&CgroupGuard>,
+    child_fn: F,
+) -> Result<i32, Error>
 where
     F: FnOnce() -> i32,
 {
+    fork_and_enter_inner(netem, seccomp, cgroup, child_fn)
+}
+
+fn fork_and_enter_inner<F>(
+    netem: Option<NetemConfig>,
+    seccomp: Option<SeccompProfile>,
+    cgroup: Option<&CgroupGuard>,
+    child_fn: F,
+) -> Result<i32, Error>
+where
+    F: FnOnce() -> i32,
+{
+    let cgroup_ready = cgroup.map(|_| pipe().map_err(Error::Pipe)).transpose()?;
+
     // SAFETY: `fork(2)` itself is sound to call here regardless of what
     // the child does next — no invariant of `fork` depends on it. What
     // *isn't* covered by this comment (and is a real, accepted tradeoff
@@ -178,14 +200,49 @@ where
     // does; a stricter design would fork+exec a tiny helper binary
     // instead, which is future work if this ever bites someone for real.
     match unsafe { fork() }.map_err(Error::Fork)? {
-        ForkResult::Parent { child } => match waitpid(child, None).map_err(Error::Wait)? {
-            WaitStatus::Exited(_, code) => Ok(code),
-            other => Err(Error::ChildTerminated(other)),
-        },
+        ForkResult::Parent { child } => {
+            if let Some((ready_r, ready_w)) = cgroup_ready {
+                drop(ready_r);
+
+                let release_result = match cgroup {
+                    Some(cgroup) => cgroup
+                        .add_pid(child)
+                        .and_then(|()| write(&ready_w, &[1u8]).map_err(Error::Pipe).map(|_| ())),
+                    None => Err(Error::Cgroup(io::Error::other(
+                        "cgroup readiness pipe was created without a cgroup",
+                    ))),
+                };
+                drop(ready_w);
+
+                if let Err(error) = release_result {
+                    let _ = waitpid(child, None);
+                    return Err(error);
+                }
+            }
+
+            match waitpid(child, None).map_err(Error::Wait)? {
+                WaitStatus::Exited(_, code) => Ok(code),
+                other => Err(Error::ChildTerminated(other)),
+            }
+        }
         ForkResult::Child => {
+            if let Some((ready_r, ready_w)) = cgroup_ready {
+                drop(ready_w);
+                let mut ready = [0u8; 1];
+                if read(&ready_r, &mut ready).ok() != Some(1) {
+                    std::process::exit(114);
+                }
+            }
+
             let code = match enter_unprivileged_net_namespace() {
                 Ok(()) => match run_loopback_setup(netem) {
-                    Ok(()) => child_fn(),
+                    Ok(()) => match seccomp {
+                        Some(profile) => match install_seccomp(profile) {
+                            Ok(()) => child_fn(),
+                            Err(_) => 114,
+                        },
+                        None => child_fn(),
+                    },
                     Err(_) => 113,
                 },
                 Err(_) => 111,

@@ -36,6 +36,12 @@ pub enum Error {
     /// failed.
     Netlink(nlink::Error),
 
+    /// Creating or configuring a cgroup v2 sandbox failed.
+    Cgroup(std::io::Error),
+
+    /// Installing the requested seccomp-BPF profile failed.
+    Seccomp(std::io::Error),
+
     /// Creating, reading, or writing one of the coordination pipes
     /// [`crate::veth::fork_veth_pair`] uses to sequence two forked
     /// namespaces' setup failed.
@@ -54,6 +60,8 @@ impl fmt::Display for Error {
             Error::IdMap { path, source } => write!(f, "failed writing {path}: {source}"),
             Error::Runtime(err) => write!(f, "failed to build the netlink setup runtime: {err}"),
             Error::Netlink(err) => write!(f, "netlink operation failed: {err}"),
+            Error::Cgroup(err) => write!(f, "cgroup v2 operation failed: {err}"),
+            Error::Seccomp(err) => write!(f, "seccomp-BPF operation failed: {err}"),
             Error::Pipe(err) => write!(f, "coordination pipe failed: {err}"),
         }
     }
@@ -68,6 +76,7 @@ impl std::error::Error for Error {
             Error::IdMap { source, .. } => Some(source),
             Error::Runtime(source) => Some(source),
             Error::Netlink(err) => Some(err),
+            Error::Cgroup(source) | Error::Seccomp(source) => Some(source),
             Error::ChildTerminated(_) => None,
         }
     }

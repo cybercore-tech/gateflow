@@ -17,7 +17,8 @@
 //! pair. The `#[gateflow::isolated_net]` attribute macro (`macros`
 //! feature, see the `gateflow-macros` companion crate) wraps a test to
 //! run inside a plain (non-chaos, non-paired) sandbox. Resource limits
-//! (cgroups v2) and a seccomp-bpf profile are not built yet.
+//! Optional cgroup v2 resource limits and a defense-in-depth seccomp-BPF
+//! profile are available through [`CgroupLimits`] and [`SeccompProfile`].
 //!
 //! [`Sandbox`] is a thin builder over [`netns`]/[`chaos`]/[`veth`], which
 //! stay public for direct use if you want to skip it — see their own
@@ -37,11 +38,13 @@ compile_error!(
 
 pub mod chaos;
 pub mod error;
+pub mod hardening;
 pub mod netns;
 pub mod sandbox;
 pub mod veth;
 
 pub use error::Error;
+pub use hardening::{CgroupLimits, SeccompProfile};
 pub use sandbox::{PairedSandbox, Sandbox};
 
 /// Wraps a test function so its body runs inside a freshly created,

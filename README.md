@@ -7,7 +7,7 @@
 
 Crates like [`turmoil`](https://docs.rs/turmoil) and [`madsim`](https://docs.rs/madsim) get you fast, deterministic network tests by *simulating* the network in userspace. `gateflow` takes the opposite trade: real kernel network namespaces, real sockets, real `tc netem` chaos — slower, but nothing is faked. If a test passes here, it passed against the same networking stack production actually runs on.
 
-> ⚠️ **Early and incomplete.** Namespace creation, real `tc netem` chaos on the sandbox's own loopback, and real veth-pair connectivity *between* two sandboxed namespaces all work and are tested. Resource limits (cgroups v2) and a seccomp-bpf profile are not built yet — see [Roadmap](#roadmap). Treat this as a learning project in progress, not a released tool.
+> ⚠️ **Early and incomplete.** Namespace creation, real `tc netem` chaos on the sandbox's own loopback, real veth-pair connectivity *between* two sandboxed namespaces, opt-in cgroup v2 limits, and an opt-in seccomp-BPF defense-in-depth profile are implemented. The project is still not published and the hardening controls require an appropriately delegated host — see [Roadmap](#roadmap). Treat this as a learning project in progress, not a released tool.
 
 ## Why not just simulate it?
 
@@ -126,6 +126,31 @@ let (a_code, b_code) = Sandbox::paired().enter(
 
 `Sandbox::paired()` doesn't accept `.chaos(..)` yet — combining loopback chaos with a paired sandbox is a real, untested combination, not just a reshape of what's already proven, so it's deliberately left out for now (enforced at compile time: `PairedSandbox` has no `chaos` method).
 
+### Optional hardening
+
+Resource limits and syscall hardening are explicit opt-ins on a single
+sandbox:
+
+```rust,ignore
+use gateflow::{CgroupLimits, Sandbox, SeccompProfile};
+
+Sandbox::new()
+    // Point root(..) at a cgroup v2 subtree delegated to this user when
+    // /sys/fs/cgroup itself is not writable.
+    .cgroup_limits(CgroupLimits::new().memory_max(256 * 1024 * 1024).pids_max(64))
+    .seccomp(SeccompProfile::deny_namespace_changes())
+    .enter(|| {
+        // The child is limited before this body runs.
+        0
+    })?;
+```
+
+The cgroup API currently supports memory, process-count, and CPU quota
+limits. The built-in seccomp profile blocks namespace changes, mount/umount,
+ptrace, BPF, reboot, and namespace-bearing `clone` calls while preserving
+ordinary test threads, files, and sockets. It is defense in depth rather
+than a complete syscall allow-list.
+
 See [`gateflow::netns`](src/netns.rs) / [`gateflow::veth`](src/veth.rs) for the primitives `Sandbox` is built on — including the exact process shape (a fork of a fork, not two siblings) and the full sentinel-code tables for diagnosing a setup failure — if you want to drive them directly instead of through the builder.
 
 ## Architecture
@@ -167,8 +192,8 @@ Deliberately narrow right now, on purpose — the predecessor design this grew o
 - [x] `VethEnd::signal_done`/`wait_for_peer` — a real cross-process completion signal for `PairedSandbox`, closing a gap found by dogfooding on GhostPort (its test previously had to fall back on a fixed sleep)
 - [ ] Chaos parameters on the `#[gateflow::isolated_net]` macro itself (currently `Sandbox::new().chaos(..)` only)
 - [ ] `tc netem` on the veth link itself, not just loopback — now that real inter-sandbox connectivity exists
-- [ ] cgroups v2 resource limits per test
-- [ ] Optional seccomp-bpf profile per sandboxed test
+- [x] Opt-in cgroups v2 memory/process/CPU limits per test (requires a delegated cgroup root)
+- [x] Opt-in seccomp-bpf defense-in-depth profile per sandboxed test
 - [ ] Publish to crates.io (name confirmed available as `gateflow`/`gateflow-macros`, not yet registered)
 
 ## License
