@@ -4,7 +4,7 @@
 [![Project site](https://img.shields.io/badge/project%20site-GitHub%20Pages-8b7cff.svg)](https://darkstardevx.github.io/gateflow/)
 [![Docs](https://img.shields.io/badge/docs.rs-gateflow%200.1.0-8b7cff.svg)](https://docs.rs/gateflow/0.1.0/gateflow/)
 [![Crates.io](https://img.shields.io/crates/v/gateflow.svg)](https://crates.io/crates/gateflow)
-[![Discord](https://img.shields.io/discord/1229923929959960616?logo=discord&color=%237289da)](https://discord.gg/2WvtfwQjVc)
+[![Discord: #dev-tools](https://img.shields.io/discord/1525500888905420920?logo=discord&color=%237289da)](https://discord.com/channels/1525500888905420920/1550694349556416604)
 [![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
 
 **gateflow isolates test code inside a real, unprivileged Linux network namespace — not a simulated one.**
@@ -13,7 +13,7 @@ Crates like [`turmoil`](https://docs.rs/turmoil) and [`madsim`](https://docs.rs/
 
 > **v0.1.0 is published.** Namespace creation, real `tc netem` chaos on the sandbox's own loopback, real veth-pair connectivity *between* two sandboxed namespaces, opt-in cgroup v2 limits, and an opt-in seccomp-BPF defense-in-depth profile are implemented. The hardening controls require an appropriately delegated host, and the remaining scope is tracked in the [Roadmap](#roadmap).
 
-> ⚠️ **Early development.** gateflow is new and may still break or behave unexpectedly across kernels, distributions, CI runners, and delegated cgroup setups. Please [file an issue](https://github.com/darkstardevx/gateflow/issues) with your reproduction details, or [join the Discord](https://discord.gg/2WvtfwQjVc) to compare notes with the project community.
+> ⚠️ **Early development.** gateflow is new and may still break or behave unexpectedly across kernels, distributions, CI runners, and delegated cgroup setups. Please [file an issue](https://github.com/darkstardevx/gateflow/issues) with your reproduction details, or join [#dev-tools on Discord](https://discord.com/channels/1525500888905420920/1550694349556416604) to compare notes with the project community.
 
 ## Why not just simulate it?
 
