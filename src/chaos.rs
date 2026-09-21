@@ -37,9 +37,5 @@
 //! outside Rust entirely (`tc qdisc add dev lo root netem delay 100ms`)
 //! to test local-latency sensitivity without touching a real network.
 
-// TODO: once `#[gateflow::isolated_net(delay_ms = 100, loss_percent = 1.0)]`
-// (or similar) exists in gateflow-macros, add a worked example here
-// showing the macro form next to fork_and_enter_with_chaos.
-
 pub use nlink::Percent;
 pub use nlink::netlink::tc::NetemConfig;

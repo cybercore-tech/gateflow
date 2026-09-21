@@ -23,3 +23,16 @@ fn isolated_net_maps_to_uid_zero() {
         "macro-driven sandbox did not observe uid 0"
     );
 }
+
+/// Proves the macro's chaos parameters compile through to the same
+/// `Sandbox::chaos(..)` path used by manual callers. The uid assertion keeps
+/// this test independent of timing; the lower-level sandbox tests measure
+/// the actual netem delay separately.
+#[gateflow::isolated_net(delay_ms = 1, loss_percent = 0.0)]
+fn isolated_net_accepts_chaos_parameters() {
+    assert_eq!(
+        nix::unistd::getuid().as_raw(),
+        0,
+        "macro-driven chaos sandbox did not observe uid 0"
+    );
+}

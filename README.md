@@ -80,7 +80,20 @@ Sandbox::new().chaos(netem).enter(|| {
 })?;
 ```
 
-Not yet wired into the `#[gateflow::isolated_net]` macro (no attribute syntax for chaos parameters yet) — use `Sandbox::new().chaos(..)` directly for now.
+The same settings can be attached directly to the test macro. Supported
+parameters are `delay_ms`, `jitter_ms`, `loss_percent`, `reorder_percent`,
+`corrupt_percent`, and `duplicate_percent`:
+
+```rust,ignore
+#[gateflow::isolated_net(delay_ms = 100, jitter_ms = 20, loss_percent = 1.0)]
+fn tolerates_a_slow_lossy_loopback() {
+    // Real tc netem is applied to lo before this body runs.
+}
+```
+
+Durations are integer milliseconds and percentages are clamped to
+`0.0..=100.0`. Reordering follows the kernel's requirement that a delay is
+also configured.
 
 ### Real connectivity between two sandboxes
 

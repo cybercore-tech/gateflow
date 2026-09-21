@@ -1,6 +1,20 @@
 # gateflow-macros
 
-Procedural macro companion to [`gateflow`](../..) — provides `#[gateflow::isolated_net]`. Not meant to be depended on directly; enable the `macros` feature on the `gateflow` crate instead.
+Procedural macro companion to [`gateflow`](../..) — provides
+`#[gateflow::isolated_net]`. Enable the `macros` feature on the `gateflow`
+crate instead of depending on this crate directly.
+
+The attribute accepts optional loopback chaos parameters:
+
+```rust,ignore
+#[gateflow::isolated_net(delay_ms = 100, loss_percent = 1.0)]
+fn network_test() {
+    // Runs with real tc netem delay and packet loss on loopback.
+}
+```
+
+Supported keys are `delay_ms`, `jitter_ms`, `loss_percent`,
+`reorder_percent`, `corrupt_percent`, and `duplicate_percent`.
 
 ## 🚦 Quality Gate
 
