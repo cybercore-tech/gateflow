@@ -147,11 +147,11 @@
 
     <section class="section-pad install-section" id="install">
       <div class="container install-grid reveal">
-        <div class="install-copy"><div class="section-kicker">05 / FIRST RUN</div><h2>Put a gate<br>in your tests.</h2><p>Not published on crates.io yet. Pull the current line from GitHub, enable the macro, and start with a real namespace.</p><a class="text-link" href="https://github.com/darkstardevx/gateflow#quick-start" target="_blank" rel="noreferrer">Read the quick start ↗</a></div>
+        <div class="install-copy"><div class="section-kicker">05 / FIRST RUN</div><h2>Put a gate<br>in your tests.</h2><p>Install the published Rust crate for tests, or use the signed release installer for the diagnostic CLI. Both paths land on the same real kernel surface.</p><a class="text-link" href="https://github.com/darkstardevx/gateflow#quick-start" target="_blank" rel="noreferrer">Read the quick start ↗</a></div>
         <div class="install-panel">
-          <div class="install-panel-head"><span><span class="corner-dot"></span> terminal / cargo</span><button class="copy-button" type="button" aria-label="Copy install command">COPY</button></div>
-          <div class="install-command"><span class="prompt">$</span><code id="install-command">cargo add gateflow --git https://github.com/darkstardevx/gateflow --features macros</code></div>
-          <div class="install-snippet"><span class="snippet-comment">// chaos is a parameter, not a rewrite</span><br><span class="snippet-attr">#[gateflow::isolated_net</span><span class="snippet-value">(delay_ms = 100, loss_percent = 1.0)</span><span class="snippet-attr">]</span><br><span class="snippet-keyword">fn</span> <span class="snippet-fn">handles_a_bad_link</span>() {<br><span class="snippet-indent">assert!(service_survives());</span><br>}</div>
+          <div class="install-panel-head"><span><span class="corner-dot"></span> terminal / signed release</span><button class="copy-button" type="button" aria-label="Copy install command">COPY</button></div>
+          <div class="install-command"><span class="prompt">$</span><code id="install-command">curl --proto '=https' --tlsv1.2 -fsSL https://github.com/darkstardevx/gateflow/raw/v0.1.0/scripts/install.sh | sh</code></div>
+          <div class="install-snippet"><span class="snippet-comment"># Rust test dependency</span><br><span class="snippet-keyword">cargo</span> add gateflow --version 0.1.0 --features macros<br><br><span class="snippet-comment"># installer verifies Sigstore + SHA-256</span><br><span class="snippet-attr">requires:</span> cosign, curl, tar, sha256sum</div>
         </div>
       </div>
     </section>

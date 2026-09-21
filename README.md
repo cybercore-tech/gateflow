@@ -43,7 +43,7 @@ cargo install gateflow --version 0.1.0
 gateflow doctor
 ```
 
-For supported Linux hosts, the signed binary installer is pinned to the release tag:
+For supported Linux hosts, install `cosign` first, then use the signed binary installer pinned to the release tag:
 
 ```sh
 curl --proto '=https' --tlsv1.2 -fsSL \
