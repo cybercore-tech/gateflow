@@ -2,6 +2,7 @@
 
 [![CI](https://github.com/darkstardevx/gateflow/actions/workflows/ci.yml/badge.svg)](https://github.com/darkstardevx/gateflow/actions/workflows/ci.yml)
 [![Project site](https://img.shields.io/badge/project%20site-GitHub%20Pages-8b7cff.svg)](https://darkstardevx.github.io/gateflow/)
+[![Docs](https://img.shields.io/badge/docs.rs-gateflow%200.1.0-8b7cff.svg)](https://docs.rs/gateflow/0.1.0/gateflow/)
 [![Crates.io](https://img.shields.io/crates/v/gateflow.svg)](https://crates.io/crates/gateflow)
 [![Discord](https://img.shields.io/discord/1229923929959960616?logo=discord&color=%237289da)](https://discord.gg/2WvtfwQjVc)
 [![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
