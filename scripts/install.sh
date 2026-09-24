@@ -6,7 +6,7 @@ die() {
     exit 1
 }
 
-repo="${GATEFLOW_REPO:-darkstardevx/gateflow}"
+repo="${GATEFLOW_REPO:-cybercore-tech/gateflow}"
 requested_version="${GATEFLOW_VERSION:-latest}"
 home="${HOME:-}"
 install_dir="${GATEFLOW_INSTALL_DIR:-}"

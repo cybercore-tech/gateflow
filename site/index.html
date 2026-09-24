@@ -22,7 +22,7 @@
         <a href="#why">Why gateflow</a>
         <a href="#surface">Surface</a>
         <a href="#install">Install</a>
-        <a class="nav-button" href="https://github.com/darkstardevx/gateflow" target="_blank" rel="noreferrer">GitHub <span>↗</span></a>
+        <a class="nav-button" href="https://github.com/cybercore-tech/gateflow" target="_blank" rel="noreferrer">GitHub <span>↗</span></a>
       </div>
       <button class="menu-button" type="button" aria-label="Toggle navigation" aria-expanded="false">☰</button>
     </div>
@@ -37,7 +37,7 @@
           <p class="hero-lede">gateflow puts Rust test code inside an unprivileged Linux network namespace — with real sockets, real veth links, and real <code>tc netem</code> chaos.</p>
           <div class="hero-actions">
             <a class="button button-primary" href="#install">Start with gateflow <span>↓</span></a>
-            <a class="button button-secondary" href="https://github.com/darkstardevx/gateflow" target="_blank" rel="noreferrer">Read the source <span>↗</span></a>
+            <a class="button button-secondary" href="https://github.com/cybercore-tech/gateflow" target="_blank" rel="noreferrer">Read the source <span>↗</span></a>
           </div>
           <div class="tag-row">
             <span class="tag tag-lime">Rust 1.88+</span>
@@ -47,7 +47,7 @@
           </div>
           <div class="community-note reveal delay-two">
             <span class="community-label">EARLY DEVELOPMENT</span>
-            <p>Kernel behavior varies. If gateflow breaks on your distro or CI runner, <a href="https://github.com/darkstardevx/gateflow/issues" target="_blank" rel="noreferrer">file an issue</a> or <a href="https://discord.com/channels/1525500888905420920/1550694349556416604" target="_blank" rel="noreferrer">join #dev-tools on Discord</a>.<span class="community-roster">CYBERCORE · CYBERDECK · DIAGPRINT · GATEFLOW · CYBERMETA</span></p>
+            <p>Kernel behavior varies. If gateflow breaks on your distro or CI runner, <a href="https://github.com/cybercore-tech/gateflow/issues" target="_blank" rel="noreferrer">file an issue</a> or <a href="https://discord.com/channels/1525500888905420920/1550694349556416604" target="_blank" rel="noreferrer">join #dev-tools on Discord</a>.<span class="community-roster">CYBERCORE · CYBERDECK · DIAGPRINT · GATEFLOW · CYBERMETA</span></p>
           </div>
         </div>
 
@@ -151,22 +151,22 @@
 
     <section class="section-pad install-section" id="install">
       <div class="container install-grid reveal">
-        <div class="install-copy"><div class="section-kicker">05 / FIRST RUN</div><h2>Put a gate<br>in your tests.</h2><p>Install the published Rust crate for tests, or use the signed release installer for the diagnostic CLI. Both paths land on the same real kernel surface.</p><a class="text-link" href="https://github.com/darkstardevx/gateflow#quick-start" target="_blank" rel="noreferrer">Read the quick start ↗</a></div>
+        <div class="install-copy"><div class="section-kicker">05 / FIRST RUN</div><h2>Put a gate<br>in your tests.</h2><p>Install the published Rust crate for tests, or use the signed release installer for the diagnostic CLI. Both paths land on the same real kernel surface.</p><a class="text-link" href="https://github.com/cybercore-tech/gateflow#quick-start" target="_blank" rel="noreferrer">Read the quick start ↗</a></div>
         <div class="install-panel">
           <div class="install-panel-head"><span><span class="corner-dot"></span> terminal / signed release</span><button class="copy-button" type="button" aria-label="Copy install command">COPY</button></div>
-          <div class="install-command"><span class="prompt">$</span><code id="install-command">curl --proto '=https' --tlsv1.2 -fsSL https://github.com/darkstardevx/gateflow/raw/v0.1.0/scripts/install.sh | sh</code></div>
+          <div class="install-command"><span class="prompt">$</span><code id="install-command">curl --proto '=https' --tlsv1.2 -fsSL https://github.com/cybercore-tech/gateflow/raw/v0.1.0/scripts/install.sh | sh</code></div>
           <div class="install-snippet"><span class="snippet-comment"># Rust test dependency</span><br><span class="snippet-keyword">cargo</span> add gateflow --version 0.1.0 --features macros<br><br><span class="snippet-comment"># installer verifies Sigstore + SHA-256</span><br><span class="snippet-attr">requires:</span> cosign, curl, tar, sha256sum</div>
         </div>
       </div>
     </section>
 
     <section class="container final-strip reveal">
-      <span class="final-mark" aria-hidden="true">╲╱</span><p>THE TEST PASSED THE MODEL.<br><strong>NOW RUN IT AGAINST THE KERNEL.</strong></p><a class="button button-primary" href="https://github.com/darkstardevx/gateflow" target="_blank" rel="noreferrer">Open repository ↗</a>
+      <span class="final-mark" aria-hidden="true">╲╱</span><p>THE TEST PASSED THE MODEL.<br><strong>NOW RUN IT AGAINST THE KERNEL.</strong></p><a class="button button-primary" href="https://github.com/cybercore-tech/gateflow" target="_blank" rel="noreferrer">Open repository ↗</a>
     </section>
   </main>
 
   <footer class="footer">
-    <div class="container footer-inner"><div class="footer-brand"><span class="mark small"><i></i><i></i><i></i></span><span>gateflow</span><small>real per-test kernel sandboxing</small></div><div class="footer-links"><a href="https://github.com/darkstardevx/gateflow" target="_blank" rel="noreferrer">GitHub</a><a href="https://docs.rs/gateflow/0.1.0/gateflow/" target="_blank" rel="noreferrer">Docs</a><a href="https://github.com/darkstardevx/gateflow/issues" target="_blank" rel="noreferrer">Issues</a><a href="https://discord.com/channels/1525500888905420920/1550694349556416604" target="_blank" rel="noreferrer">#dev-tools</a><a href="https://github.com/darkstardevx/gateflow/blob/main/README.md" target="_blank" rel="noreferrer">README</a><a href="https://github.com/darkstardevx/gateflow/blob/main/LICENSE-MIT" target="_blank" rel="noreferrer">License</a></div><span class="footer-note">LINUX / RUST / REAL KERNEL</span></div>
+    <div class="container footer-inner"><div class="footer-brand"><span class="mark small"><i></i><i></i><i></i></span><span>gateflow</span><small>real per-test kernel sandboxing</small></div><div class="footer-links"><a href="https://github.com/cybercore-tech/gateflow" target="_blank" rel="noreferrer">GitHub</a><a href="https://docs.rs/gateflow/0.1.0/gateflow/" target="_blank" rel="noreferrer">Docs</a><a href="https://github.com/cybercore-tech/gateflow/issues" target="_blank" rel="noreferrer">Issues</a><a href="https://discord.com/channels/1525500888905420920/1550694349556416604" target="_blank" rel="noreferrer">#dev-tools</a><a href="https://github.com/cybercore-tech/gateflow/blob/main/README.md" target="_blank" rel="noreferrer">README</a><a href="https://github.com/cybercore-tech/gateflow/blob/main/LICENSE-MIT" target="_blank" rel="noreferrer">License</a></div><span class="footer-note">LINUX / RUST / REAL KERNEL</span></div>
   </footer>
 
   <script src="script.js"></script>

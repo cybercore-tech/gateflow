@@ -26,7 +26,7 @@ The installer intentionally requires `cosign` and refuses to install until both 
 
 ```sh
 curl --proto '=https' --tlsv1.2 -fsSL \
-  https://github.com/darkstardevx/gateflow/raw/v0.1.0/scripts/install.sh | sh
+  https://github.com/cybercore-tech/gateflow/raw/v0.1.0/scripts/install.sh | sh
 ```
 
 Do not point the installer at a branch URL. Keep user-facing install commands pinned to a release tag.
