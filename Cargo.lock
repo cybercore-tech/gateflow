@@ -53,7 +53,7 @@ checksum = "92d699e522242e69e3003b94ecc1f960f3a5e015aa7c5d7486e65ad01dd94f5e"
 
 [[package]]
 name = "gateflow"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "gateflow-macros",
  "nix",
@@ -65,7 +65,7 @@ dependencies = [
 
 [[package]]
 name = "gateflow-macros"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "proc-macro2",
  "quote",
